@@ -4,9 +4,26 @@ This extension saves the most recently edited `textarea.my` URL in
 `browser.storage.sync`. On another device using the same signed-in Firefox
 account, click the extension and choose **Open synced textarea**.
 
-The same package supports Firefox for Android 142 and newer. Its Manifest V3
-background uses an event page (`background.scripts`), because background
-service workers are not supported on Firefox for Android.
+## Firefox for Android
+
+The same package supports Firefox for Android 142 and newer. Install the signed
+extension from Mozilla Add-ons, enable Firefox Sync, and sign in to the same
+Firefox account on every device.
+
+To use it:
+
+1. Open `textarea.my` and edit a document on one device.
+2. Wait for Firefox Sync to run.
+3. Open **Add-ons → Textarea Sync** on the other device.
+4. Tap **Open synced textarea**.
+
+The Manifest V3 background uses an event page (`background.scripts`), because
+background service workers are not supported on Firefox for Android. The popup
+also uses touch-sized controls and adapts to narrow mobile panels.
+
+For development testing, connect an Android phone or emulator with Android
+Debug Bridge and run Mozilla's `web-ext` Android workflow. Run `make lint`
+before release to check the manifest and APIs against Firefox Android support.
 
 ## Try it temporarily
 
@@ -14,10 +31,6 @@ service workers are not supported on Firefox for Android.
 2. Choose **Load Temporary Add-on**.
 3. Select this directory's `manifest.json`.
 4. Repeat on the other device and make sure Firefox Sync is enabled there.
-
-For Android development, connect the phone or emulator with Android Debug
-Bridge and use Mozilla's `web-ext run -t firefox-android` workflow. Normal users
-install the signed build from Mozilla Add-ons.
 
 Temporary add-ons are removed when Firefox restarts. For normal installation
 and reliable cross-device use, package and sign the extension through Mozilla
