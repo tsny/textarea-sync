@@ -1,0 +1,49 @@
+:root {
+  color-scheme: light dark;
+  font: 14px/1.4 system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  min-width: 290px;
+}
+
+main {
+  padding: 16px;
+}
+
+h1 {
+  font-size: 18px;
+  margin: 0 0 10px;
+}
+
+p {
+  margin: 0 0 12px;
+}
+
+#details,
+.hint {
+  color: #777;
+  font-size: 12px;
+}
+
+button {
+  background: #0569fa;
+  border: 0;
+  border-radius: 7px;
+  color: white;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 600;
+  padding: 9px 12px;
+  width: 100%;
+}
+
+button:disabled {
+  cursor: default;
+  opacity: .5;
+}
+
+.hint {
+  margin: 12px 0 0;
+}

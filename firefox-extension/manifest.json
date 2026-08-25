@@ -1,0 +1,29 @@
+{
+  "manifest_version": 3,
+  "name": "Textarea Sync",
+  "description": "Keep your latest textarea.my document available across signed-in Firefox devices.",
+  "version": "0.1.0",
+  "permissions": ["storage"],
+  "host_permissions": ["https://textarea.my/*"],
+  "background": {
+    "scripts": ["sync-storage.js", "background.js"]
+  },
+  "action": {
+    "default_title": "Open synced Textarea",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [{
+    "matches": ["https://textarea.my/*"],
+    "js": ["content.js"],
+    "run_at": "document_start"
+  }],
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "textarea-sync@textarea.my",
+      "strict_min_version": "109.0",
+      "data_collection_permissions": {
+        "required": ["none"]
+      }
+    }
+  }
+}
