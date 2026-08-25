@@ -14,7 +14,7 @@ EXTENSION_FILES := \
 	popup.css \
 	popup.js
 
-.PHONY: all package test clean
+.PHONY: all package test lint clean
 
 all: package
 
@@ -30,6 +30,11 @@ test:
 	node --check content.js
 	node --check popup.js
 	node --check sync-storage.js
+
+lint:
+	npx --yes web-ext lint --source-dir . \
+		--ignore-files README.md Makefile .gitignore sync-storage.test.mjs 'dist/**' \
+		--no-config-discovery --warnings-as-errors
 
 $(DIST_DIR):
 	mkdir -p $(DIST_DIR)
