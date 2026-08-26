@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict'
-import './sync-storage.js'
+import './document-storage.js'
 
-const {MAX_PATH_LENGTH, getLatest, getOrCreateSyncId, saveLatest} = globalThis.TextareaSyncStorage
+const {MAX_PATH_LENGTH, getLatest, saveLatest} = globalThis.TextareaDocumentStorage
 
 class MemoryStorage {
   values = {}
@@ -34,8 +34,6 @@ assert.deepEqual(await getLatest(storage), {
   title: 'Long note',
   savedAt: storage.values.latestDocument.savedAt,
 })
-assert.equal(storage.values.latestDocument.chunks, 3)
-
 assert.deepEqual(
   await saveLatest(storage, {path: longPath, title: 'Long note'}),
   {changed: false}
@@ -43,7 +41,6 @@ assert.deepEqual(
 
 const shortPath = '/#abc'
 await saveLatest(storage, {path: shortPath, title: 'Short note'})
-assert.equal(storage.values.latestDocumentChunk1, undefined)
 assert.equal((await getLatest(storage)).path, shortPath)
 
 await assert.rejects(
@@ -51,12 +48,4 @@ await assert.rejects(
   /too large/
 )
 
-const syncId = await getOrCreateSyncId(storage)
-assert.match(syncId, /^[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}$/)
-assert.equal(await getOrCreateSyncId(storage), syncId)
-
-const alreadySyncedStorage = new MemoryStorage()
-alreadySyncedStorage.values.syncId = 'ABCD-2345'
-assert.equal(await getOrCreateSyncId(alreadySyncedStorage), 'ABCD-2345')
-
-console.log('Shared sync-storage tests passed')
+console.log('Shared document-storage tests passed')

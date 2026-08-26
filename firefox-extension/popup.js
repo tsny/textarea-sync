@@ -1,4 +1,5 @@
 const extensionApi = globalThis.browser ?? globalThis.chrome
+const {capturePastebinCredentials} = globalThis.TextareaPopupForm
 const status = document.querySelector('#status')
 const details = document.querySelector('#details')
 const openButton = document.querySelector('#open')
@@ -16,7 +17,7 @@ let latest = null
 let pastebinUrl = null
 
 extensionApi.runtime.sendMessage({type: 'get-latest'}).then(response => {
-  if (!response?.ok) throw new Error(response?.error || 'Browser Sync is unavailable.')
+  if (!response?.ok) throw new Error(response?.error || 'Local extension storage is unavailable.')
   if (!response.document) {
     status.textContent = 'No document has been synced yet.'
     return
@@ -85,15 +86,12 @@ async function loadPastebinState() {
 
 pastebinForm.addEventListener('submit', async event => {
   event.preventDefault()
-  setPastebinBusy(true)
+  const credentials = capturePastebinCredentials(pastebinForm, setPastebinBusy)
   pastebinStatus.textContent = 'Connecting to Pastebin…'
-  const values = new FormData(pastebinForm)
   try {
     const response = await extensionApi.runtime.sendMessage({
       type: 'connect-pastebin',
-      developerKey: values.get('developerKey'),
-      username: values.get('username'),
-      password: values.get('password'),
+      ...credentials,
     })
     if (!response?.ok) throw new Error(response?.error || 'Unable to connect Pastebin.')
     pastebinForm.reset()

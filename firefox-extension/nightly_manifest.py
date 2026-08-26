@@ -22,11 +22,11 @@ def main():
 
     manifest["name"] = "Textarea Sync Nightly"
     manifest["description"] = (
-        "Nightly build of Textarea Sync for testing across signed-in Firefox devices."
+        "Nightly build of Textarea Sync with local storage and Pastebin sharing."
     )
     manifest["version"] = args.version
     manifest["browser_specific_settings"]["gecko"]["id"] = args.id
-    manifest["action"]["default_title"] = "Open synced Textarea (Nightly)"
+    manifest["action"]["default_title"] = "Open latest Textarea (Nightly)"
 
     args.destination.write_text(json.dumps(manifest, indent=2) + "\n")
 

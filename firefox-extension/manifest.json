@@ -1,15 +1,15 @@
 {
   "manifest_version": 3,
   "name": "Textarea Sync",
-  "description": "Keep your latest textarea.my document available across signed-in Firefox devices.",
+  "description": "Save your latest textarea.my document locally and share it across devices with Pastebin.",
   "version": "0.1.0",
   "permissions": ["storage"],
   "host_permissions": ["https://textarea.my/*", "https://pastebin.com/*"],
   "background": {
-    "scripts": ["sync-storage.js", "pastebin.js", "background.js"]
+    "scripts": ["document-storage.js", "pastebin.js", "background.js"]
   },
   "action": {
-    "default_title": "Open synced Textarea",
+    "default_title": "Open latest Textarea",
     "default_popup": "popup.html"
   },
   "content_scripts": [{

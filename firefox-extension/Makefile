@@ -14,9 +14,10 @@ EXTENSION_FILES := \
 	background.js \
 	content.js \
 	pastebin.js \
-	sync-storage.js \
+	document-storage.js \
 	popup.html \
 	popup.css \
+	popup-form.js \
 	popup.js
 
 .PHONY: all package nightly test lint clean
@@ -46,14 +47,16 @@ nightly: test | $(DIST_DIR)
 test:
 	python3 -m json.tool manifest.json >/dev/null
 	node ../scripts/sync-extension-shared.mjs --check
-	node ../extension-shared/sync-storage.test.mjs
+	node ../extension-shared/document-storage.test.mjs
 	node ../extension-shared/pastebin.test.mjs
 	node ../extension-shared/background.test.mjs
+	node ../extension-shared/popup-form.test.mjs
 	node --check background.js
 	node --check content.js
 	node --check pastebin.js
+	node --check popup-form.js
 	node --check popup.js
-	node --check sync-storage.js
+	node --check document-storage.js
 
 lint:
 	npx --yes web-ext lint --source-dir . \

@@ -6,10 +6,10 @@
 <link rel="stylesheet" href="popup.css">
 <main>
   <h1>Textarea Sync</h1>
-  <p id="status" aria-live="polite">Looking for your latest document…</p>
+  <p id="status" aria-live="polite">Looking for your latest local document…</p>
   <p id="details" hidden></p>
-  <button id="open" type="button" disabled>Open synced textarea</button>
-  <p class="hint">Browser Sync must be enabled on each signed-in device.</p>
+  <button id="open" type="button" disabled>Open latest textarea</button>
+  <p class="hint">Saved on this device until you update Pastebin.</p>
 
   <section aria-labelledby="pastebin-heading">
     <h2 id="pastebin-heading">Pastebin sync</h2>
@@ -29,7 +29,7 @@
         <input name="password" type="password" required autocomplete="current-password">
       </label>
       <button type="submit">Connect Pastebin</button>
-      <p class="hint">Your password is sent directly to Pastebin to obtain a user session key and is never stored.</p>
+      <p class="hint">Your password is used once to obtain a Pastebin user key and is never stored.</p>
       <button id="pastebin-api-help" class="text-button" type="button">Where to find the API key</button>
     </form>
 
@@ -44,5 +44,6 @@
     </div>
   </section>
 </main>
+<script src="popup-form.js"></script>
 <script src="popup.js"></script>
 </html>

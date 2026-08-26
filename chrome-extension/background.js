@@ -1,21 +1,12 @@
 const extensionApi = globalThis.browser ?? globalThis.chrome
-const {getLatest, getOrCreateSyncId, saveLatest} = globalThis.TextareaSyncStorage
+const {getLatest, saveLatest} = globalThis.TextareaDocumentStorage
 const {load: loadPastebin, login: loginPastebin, replace: replacePastebin} = globalThis.TextareaPastebin
 const TEXTAREA_ORIGIN = 'https://textarea.my'
 const PASTEBIN_CREDENTIALS_KEY = 'pastebinCredentials'
 const PASTEBIN_DEVICE_ID_KEY = 'pastebinDeviceId'
 const PASTEBIN_LAST_URL_KEY = 'pastebinLastUrl'
 let saveQueue = Promise.resolve()
-let syncIdRequest = null
 let deviceIdRequest = null
-
-function getSyncId() {
-  if (!syncIdRequest) {
-    syncIdRequest = getOrCreateSyncId(extensionApi.storage.sync)
-      .finally(() => { syncIdRequest = null })
-  }
-  return syncIdRequest
-}
 
 function getDeviceId() {
   if (!deviceIdRequest) {
@@ -73,7 +64,7 @@ async function getPastebinState() {
 async function syncLatestToPastebin() {
   const credentials = await getPastebinCredentials()
   if (!credentials) throw new Error('Connect a Pastebin account first.')
-  const latest = await getLatest(extensionApi.storage.sync)
+  const latest = await getLatest(extensionApi.storage.local)
   if (!latest) throw new Error('Open and edit a textarea before syncing to Pastebin.')
 
   const deviceId = await getDeviceId()
@@ -102,12 +93,9 @@ function documentFromUrl(value, title = 'Textarea') {
 function queueSave(document) {
   saveQueue = saveQueue
     .catch(() => {})
-    .then(() => saveLatest(extensionApi.storage.sync, document))
+    .then(() => saveLatest(extensionApi.storage.local, document))
     .then(result => {
-      if (result.changed) {
-        extensionApi.action.setBadgeBackgroundColor({color: '#2e7d32'})
-        extensionApi.action.setBadgeText({text: '✓'})
-      }
+      extensionApi.action.setBadgeText({text: ''})
       return result
     })
     .catch(error => {
@@ -120,7 +108,7 @@ function queueSave(document) {
 }
 
 extensionApi.runtime.onInstalled.addListener(() => {
-  extensionApi.action.setBadgeBackgroundColor({color: '#2e7d32'})
+  extensionApi.action.setBadgeText({text: ''})
 })
 
 extensionApi.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
@@ -143,14 +131,8 @@ function handleMessage(message, sender) {
   }
 
   if (message?.type === 'get-latest') {
-    return getLatest(extensionApi.storage.sync)
+    return getLatest(extensionApi.storage.local)
       .then(document => ({ok: true, document}))
-      .catch(error => ({ok: false, error: error.message}))
-  }
-
-  if (message?.type === 'get-sync-id') {
-    return getSyncId()
-      .then(id => ({ok: true, id}))
       .catch(error => ({ok: false, error: error.message}))
   }
 
@@ -163,6 +145,22 @@ function handleMessage(message, sender) {
   if (message?.type === 'get-pastebin-state') {
     return getPastebinState()
       .then(state => ({ok: true, ...state}))
+      .catch(error => ({ok: false, error: error.message}))
+  }
+
+  if (message?.type === 'get-pastebin-connection') {
+    return getPastebinCredentials()
+      .then(credentials => ({ok: true, connected: Boolean(credentials)}))
+      .catch(error => ({ok: false, error: error.message}))
+  }
+
+  if (message?.type === 'open-pastebin-setup') {
+    const senderUrl = sender.url || sender.tab?.url
+    if (!senderUrl?.startsWith(`${TEXTAREA_ORIGIN}/`)) {
+      return {ok: false, error: 'Pastebin setup can only be opened from textarea.my.'}
+    }
+    return extensionApi.tabs.create({url: extensionApi.runtime.getURL('popup.html')})
+      .then(() => ({ok: true}))
       .catch(error => ({ok: false, error: error.message}))
   }
 

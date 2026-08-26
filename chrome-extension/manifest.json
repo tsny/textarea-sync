@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "Textarea Sync",
-  "description": "Keep your latest textarea.my document available across signed-in Chrome devices.",
+  "description": "Save your latest textarea.my document locally and share it across devices with Pastebin.",
   "version": "0.1.0",
   "key": "MIIBIjANBgkqhkiG9w0BAQEFAAOCAQ8AMIIBCgKCAQEAmEHANkJJZfiaoa39lFWA5YZ+9+NN2axTcjtZDgrFymJaFL6a3Q16H1eWLf+vPluGC0J8IcqcLD6zkZHkx9UwI3ZJFJBOw1IBK46EE0J0eGmWmMF+IVlmtHWgzsc/oE/TlWURoaS5a9KMduqsLS9Yrkzwug3NYlCAtl+/OftBriIahc65poKlxTbLveA4bNbEAY1IJCSdxJY54YdPd3t2om1/g6S1aYiu3ijS6IgA34DUlYyNvujCqyqsw8utXIKxXsZPM4XllH4kkHR0/q30hO+SB1pwMAKXUDXZVi8/aRURtkCE/rGrov7rUm5ItuuHYJ3m0RDLE5quLJfpLL/e1QIDAQAB",
   "permissions": ["storage"],
@@ -11,7 +11,7 @@
     "type": "module"
   },
   "action": {
-    "default_title": "Open synced Textarea",
+    "default_title": "Open latest Textarea",
     "default_popup": "popup.html"
   },
   "content_scripts": [{
