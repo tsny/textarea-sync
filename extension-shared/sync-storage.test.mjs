@@ -1,5 +1,7 @@
 import assert from 'node:assert/strict'
-import {MAX_PATH_LENGTH, getLatest, saveLatest} from './sync-storage.js'
+import './sync-storage.js'
+
+const {MAX_PATH_LENGTH, getLatest, getOrCreateSyncId, saveLatest} = globalThis.TextareaSyncStorage
 
 class MemoryStorage {
   values = {}
@@ -49,4 +51,12 @@ await assert.rejects(
   /too large/
 )
 
-console.log('sync-storage tests passed')
+const syncId = await getOrCreateSyncId(storage)
+assert.match(syncId, /^[2-9A-HJ-NP-Z]{4}-[2-9A-HJ-NP-Z]{4}$/)
+assert.equal(await getOrCreateSyncId(storage), syncId)
+
+const alreadySyncedStorage = new MemoryStorage()
+alreadySyncedStorage.values.syncId = 'ABCD-2345'
+assert.equal(await getOrCreateSyncId(alreadySyncedStorage), 'ABCD-2345')
+
+console.log('Shared sync-storage tests passed')

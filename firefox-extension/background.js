@@ -1,6 +1,91 @@
-const {getLatest, saveLatest} = TextareaSyncStorage
+const extensionApi = globalThis.browser ?? globalThis.chrome
+const {getLatest, getOrCreateSyncId, saveLatest} = globalThis.TextareaSyncStorage
+const {load: loadPastebin, login: loginPastebin, replace: replacePastebin} = globalThis.TextareaPastebin
 const TEXTAREA_ORIGIN = 'https://textarea.my'
+const PASTEBIN_CREDENTIALS_KEY = 'pastebinCredentials'
+const PASTEBIN_DEVICE_ID_KEY = 'pastebinDeviceId'
+const PASTEBIN_LAST_URL_KEY = 'pastebinLastUrl'
 let saveQueue = Promise.resolve()
+let syncIdRequest = null
+let deviceIdRequest = null
+
+function getSyncId() {
+  if (!syncIdRequest) {
+    syncIdRequest = getOrCreateSyncId(extensionApi.storage.sync)
+      .finally(() => { syncIdRequest = null })
+  }
+  return syncIdRequest
+}
+
+function getDeviceId() {
+  if (!deviceIdRequest) {
+    deviceIdRequest = extensionApi.storage.local.get(PASTEBIN_DEVICE_ID_KEY).then(async values => {
+      if (typeof values[PASTEBIN_DEVICE_ID_KEY] === 'string') {
+        return values[PASTEBIN_DEVICE_ID_KEY]
+      }
+      const bytes = crypto.getRandomValues(new Uint8Array(4))
+      const id = Array.from(bytes, byte => byte.toString(16).padStart(2, '0')).join('').toUpperCase()
+      await extensionApi.storage.local.set({[PASTEBIN_DEVICE_ID_KEY]: id})
+      return id
+    }).finally(() => { deviceIdRequest = null })
+  }
+  return deviceIdRequest
+}
+
+async function getPastebinCredentials() {
+  return (await extensionApi.storage.local.get(PASTEBIN_CREDENTIALS_KEY))[PASTEBIN_CREDENTIALS_KEY]
+}
+
+async function connectPastebin(message) {
+  const developerKey = String(message.developerKey || '').trim()
+  const username = String(message.username || '').trim()
+  const userKey = await loginPastebin(developerKey, username, String(message.password || ''))
+  await extensionApi.storage.local.set({
+    [PASTEBIN_CREDENTIALS_KEY]: {developerKey, userKey, username},
+  })
+  return {username}
+}
+
+async function getPastebinState() {
+  const credentials = await getPastebinCredentials()
+  if (!credentials) return {connected: false}
+
+  const localState = await extensionApi.storage.local.get(PASTEBIN_LAST_URL_KEY)
+  try {
+    const remote = await loadPastebin(credentials)
+    return {
+      connected: true,
+      username: credentials.username,
+      documents: remote.documents,
+      pasteUrl: remote.pastes[0]?.url || localState[PASTEBIN_LAST_URL_KEY] || null,
+    }
+  } catch (error) {
+    return {
+      connected: true,
+      username: credentials.username,
+      documents: [],
+      pasteUrl: localState[PASTEBIN_LAST_URL_KEY] || null,
+      error: error.message,
+    }
+  }
+}
+
+async function syncLatestToPastebin() {
+  const credentials = await getPastebinCredentials()
+  if (!credentials) throw new Error('Connect a Pastebin account first.')
+  const latest = await getLatest(extensionApi.storage.sync)
+  if (!latest) throw new Error('Open and edit a textarea before syncing to Pastebin.')
+
+  const deviceId = await getDeviceId()
+  const result = await replacePastebin(credentials, {
+    deviceId,
+    url: `${TEXTAREA_ORIGIN}${latest.path}`,
+    title: latest.title,
+    updatedAt: latest.savedAt,
+  })
+  await extensionApi.storage.local.set({[PASTEBIN_LAST_URL_KEY]: result.pasteUrl})
+  return result
+}
 
 function documentFromUrl(value, title = 'Textarea') {
   let url
@@ -17,34 +102,34 @@ function documentFromUrl(value, title = 'Textarea') {
 function queueSave(document) {
   saveQueue = saveQueue
     .catch(() => {})
-    .then(() => saveLatest(browser.storage.sync, document))
+    .then(() => saveLatest(extensionApi.storage.sync, document))
     .then(result => {
       if (result.changed) {
-        browser.action.setBadgeBackgroundColor({color: '#2e7d32'})
-        browser.action.setBadgeText({text: '✓'})
+        extensionApi.action.setBadgeBackgroundColor({color: '#2e7d32'})
+        extensionApi.action.setBadgeText({text: '✓'})
       }
       return result
     })
     .catch(error => {
       console.error('Unable to sync textarea.my document:', error)
-      browser.action.setBadgeText({text: '!'})
-      browser.action.setBadgeBackgroundColor({color: '#c62828'})
+      extensionApi.action.setBadgeText({text: '!'})
+      extensionApi.action.setBadgeBackgroundColor({color: '#c62828'})
       throw error
     })
   return saveQueue
 }
 
-browser.runtime.onInstalled.addListener(() => {
-  browser.action.setBadgeBackgroundColor({color: '#2e7d32'})
+extensionApi.runtime.onInstalled.addListener(() => {
+  extensionApi.action.setBadgeBackgroundColor({color: '#2e7d32'})
 })
 
-browser.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
+extensionApi.tabs.onUpdated.addListener((_tabId, changeInfo, tab) => {
   if (!changeInfo.url) return
   const document = documentFromUrl(changeInfo.url, tab.title)
   if (document) queueSave(document).catch(() => {})
 })
 
-browser.runtime.onMessage.addListener((message, sender) => {
+function handleMessage(message, sender) {
   if (message?.type === 'save-current') {
     const senderUrl = sender.url || sender.tab?.url
     const document = documentFromUrl(message.url || senderUrl, message.title)
@@ -58,8 +143,56 @@ browser.runtime.onMessage.addListener((message, sender) => {
   }
 
   if (message?.type === 'get-latest') {
-    return getLatest(browser.storage.sync)
+    return getLatest(extensionApi.storage.sync)
       .then(document => ({ok: true, document}))
       .catch(error => ({ok: false, error: error.message}))
   }
+
+  if (message?.type === 'get-sync-id') {
+    return getSyncId()
+      .then(id => ({ok: true, id}))
+      .catch(error => ({ok: false, error: error.message}))
+  }
+
+  if (message?.type === 'connect-pastebin') {
+    return connectPastebin(message)
+      .then(result => ({ok: true, ...result}))
+      .catch(error => ({ok: false, error: error.message}))
+  }
+
+  if (message?.type === 'get-pastebin-state') {
+    return getPastebinState()
+      .then(state => ({ok: true, ...state}))
+      .catch(error => ({ok: false, error: error.message}))
+  }
+
+  if (message?.type === 'sync-pastebin') {
+    return syncLatestToPastebin()
+      .then(result => ({ok: true, ...result}))
+      .catch(error => ({ok: false, error: error.message}))
+  }
+
+  if (message?.type === 'disconnect-pastebin') {
+    return extensionApi.storage.local.remove([PASTEBIN_CREDENTIALS_KEY, PASTEBIN_LAST_URL_KEY])
+      .then(() => ({ok: true}))
+      .catch(error => ({ok: false, error: error.message}))
+  }
+}
+
+// Firefox accepts a returned Promise from a message listener, while Chrome's
+// broadly compatible contract is sendResponse plus a literal true. Use the
+// latter in both browsers so the shared background has one dispatch path.
+extensionApi.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  let response
+  try {
+    response = handleMessage(message, sender)
+  } catch (error) {
+    sendResponse({ok: false, error: error.message})
+    return false
+  }
+  if (response === undefined) return false
+  Promise.resolve(response)
+    .then(sendResponse)
+    .catch(error => sendResponse({ok: false, error: error.message}))
+  return true
 })

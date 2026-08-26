@@ -4,9 +4,9 @@
   "description": "Keep your latest textarea.my document available across signed-in Firefox devices.",
   "version": "0.1.0",
   "permissions": ["storage"],
-  "host_permissions": ["https://textarea.my/*"],
+  "host_permissions": ["https://textarea.my/*", "https://pastebin.com/*"],
   "background": {
-    "scripts": ["sync-storage.js", "background.js"]
+    "scripts": ["sync-storage.js", "pastebin.js", "background.js"]
   },
   "action": {
     "default_title": "Open synced Textarea",

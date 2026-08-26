@@ -1,4 +1,8 @@
 {
   "private": true,
-  "type": "module"
+  "type": "module",
+  "scripts": {
+    "sync-shared": "node ../scripts/sync-extension-shared.mjs --write",
+    "test": "make test"
+  }
 }

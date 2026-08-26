@@ -9,7 +9,40 @@
   <p id="status" aria-live="polite">Looking for your latest document…</p>
   <p id="details" hidden></p>
   <button id="open" type="button" disabled>Open synced textarea</button>
-  <p class="hint">Firefox Sync must be enabled on each signed-in device.</p>
+  <p class="hint">Browser Sync must be enabled on each signed-in device.</p>
+
+  <section aria-labelledby="pastebin-heading">
+    <h2 id="pastebin-heading">Pastebin sync</h2>
+    <p id="pastebin-status" class="hint" aria-live="polite">Checking connection…</p>
+
+    <form id="pastebin-form" hidden>
+      <label>
+        Developer API key
+        <input name="developerKey" type="password" required autocomplete="off">
+      </label>
+      <label>
+        Pastebin username
+        <input name="username" type="text" required autocomplete="username">
+      </label>
+      <label>
+        Pastebin password
+        <input name="password" type="password" required autocomplete="current-password">
+      </label>
+      <button type="submit">Connect Pastebin</button>
+      <p class="hint">Your password is sent directly to Pastebin to obtain a user session key and is never stored.</p>
+      <button id="pastebin-api-help" class="text-button" type="button">Where to find the API key</button>
+    </form>
+
+    <div id="pastebin-connected" hidden>
+      <p id="pastebin-account"></p>
+      <button id="pastebin-sync" type="button">Update Pastebin now</button>
+      <button id="pastebin-open" class="secondary" type="button" hidden>Open sync paste</button>
+      <h3 id="pastebin-documents-heading" hidden>Synced devices</h3>
+      <ul id="pastebin-documents" aria-labelledby="pastebin-documents-heading"></ul>
+      <button id="pastebin-disconnect" class="text-button" type="button">Disconnect Pastebin</button>
+      <p class="hint">Textarea contents are embedded in their URLs and will be stored in an unlisted Pastebin paste.</p>
+    </div>
+  </section>
 </main>
 <script src="popup.js"></script>
 </html>

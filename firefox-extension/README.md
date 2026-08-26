@@ -53,6 +53,57 @@ remove generated archives.
 Run `make lint` to check both desktop and Android compatibility with Mozilla's
 current `web-ext` linter before submitting a release.
 
+The runtime files are generated from the repository's `extension-shared/`
+directory. After editing shared source, run
+`node ../scripts/sync-extension-shared.mjs --write`.
+
+## Nightly build
+
+Build the separately installable nightly add-on with:
+
+```sh
+make nightly
+```
+
+The nightly manifest is generated in a temporary staging directory. It uses:
+
+- Add-on ID: `textarea-sync-nightly@textarea.my`
+- Name: `Textarea Sync Nightly`
+- Version: the stable version plus the UTC build date, such as
+  `0.1.0.20260825`
+
+The stable manifest is never modified. Because Mozilla scopes extension storage
+to the add-on ID, stable and nightly can be installed together and have separate
+Firefox Sync data. Register the nightly ID as a separate add-on in Mozilla
+Add-ons before signing it.
+
+To rebuild more than once per day for submission, supply a unique compatible
+version explicitly:
+
+```sh
+make nightly NIGHTLY_VERSION=0.1.1.20260825
+```
+
+## Optional Pastebin sync
+
+The popup can maintain an unlisted Pastebin JSON paste named `textarea.my sync`
+containing the latest textarea URL contributed by each connected device. The
+Pastebin account is the shared namespace, so this works independently of
+Firefox Sync. Supply a Pastebin developer API key, username, and password to
+connect. The password is sent directly to Pastebin to obtain a user session key
+and is never stored; the developer and user keys are retained in
+`browser.storage.local` on that device.
+
+Pastebin does not provide an edit API. **Update Pastebin now** therefore reads
+and merges all matching sync pastes, creates a replacement, and then removes
+the older copies. Updates are manual to avoid creating a new paste after every
+textarea edit. Concurrent updates may briefly leave multiple copies, which are
+merged the next time either device updates.
+
+Because the document is embedded in a `textarea.my` URL fragment, enabling this
+feature uploads the document contents to Pastebin. Unlisted pastes are not
+end-to-end encrypted and should not contain secrets.
+
 The extension watches textarea edits automatically. Because a textarea document
 is stored in its URL fragment, the synced URL contains the document itself.
 Only the latest document is retained; whichever textarea was edited last wins.
@@ -64,7 +115,9 @@ synced by this extension.
 
 ## Privacy
 
-The extension does not use a textarea.my server account or send documents to a
-new backend. The URL is stored through the signed-in browser's Firefox Sync
-storage. Anyone with access to that Firefox account or profile may be able to
-read it, so it should not be treated as end-to-end encrypted secret storage.
+By default, the extension does not use a textarea.my server account or send
+documents to a new backend. The URL is stored through the signed-in browser's
+Firefox Sync storage. Anyone with access to that Firefox account or profile may
+be able to read it. If the optional Pastebin feature is connected, choosing
+**Update Pastebin now** additionally sends the stored textarea URLs to the
+user's Pastebin account.

@@ -5,7 +5,7 @@
 
 body {
   margin: 0;
-  width: 300px;
+  width: 340px;
   max-width: 100vw;
 }
 
@@ -16,6 +16,16 @@ main {
 h1 {
   font-size: 18px;
   margin: 0 0 10px;
+}
+
+h2 {
+  font-size: 15px;
+  margin: 0 0 10px;
+}
+
+h3 {
+  font-size: 12px;
+  margin: 14px 0 6px;
 }
 
 p {
@@ -44,6 +54,80 @@ button {
 button:disabled {
   cursor: default;
   opacity: .5;
+}
+
+button.secondary {
+  background: transparent;
+  border: 1px solid #777;
+  color: inherit;
+  margin-top: 8px;
+}
+
+button.text-button {
+  background: transparent;
+  color: #0569fa;
+  font-size: 12px;
+  min-height: 28px;
+  padding: 4px 0;
+  text-align: left;
+  width: auto;
+}
+
+section {
+  border-top: 1px solid color-mix(in srgb, currentColor 18%, transparent);
+  margin-top: 16px;
+  padding-top: 14px;
+}
+
+form label {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+  margin-bottom: 10px;
+}
+
+input {
+  background: Canvas;
+  border: 1px solid #888;
+  border-radius: 5px;
+  box-sizing: border-box;
+  color: CanvasText;
+  display: block;
+  font: 14px system-ui, sans-serif;
+  margin-top: 4px;
+  min-height: 36px;
+  padding: 6px 8px;
+  width: 100%;
+}
+
+input:focus-visible {
+  border-color: #0569fa;
+  outline: 2px solid color-mix(in srgb, #0569fa 35%, transparent);
+}
+
+#pastebin-account {
+  font-weight: 600;
+}
+
+#pastebin-documents {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+#pastebin-documents li + li {
+  margin-top: 6px;
+}
+
+#pastebin-documents button {
+  background: transparent;
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  color: inherit;
+  min-height: 38px;
+  overflow: hidden;
+  text-align: left;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .hint {
