@@ -44,11 +44,25 @@ globalThis.chrome = {
     onUpdated: {addListener() {}},
   },
 }
+let loginCount = 0
 globalThis.fetch = async (_url, options) => {
   const values = Object.fromEntries(new URLSearchParams(options.body))
-  assert.equal(values.api_user_name, 'pastebin-user')
-  assert.equal(values.api_user_password, 'pastebin-password')
-  return {ok: true, status: 200, text: async () => 'generated-user-key'}
+  if (values.api_user_name) {
+    assert.equal(values.api_user_name, 'pastebin-user')
+    assert.equal(values.api_user_password, 'pastebin-password')
+    loginCount++
+    return {
+      ok: true,
+      status: 200,
+      text: async () => loginCount === 1 ? 'generated-user-key' : 'refreshed-user-key',
+    }
+  }
+  assert.equal(values.api_option, 'list')
+  if (values.api_user_key === 'generated-user-key') {
+    return {ok: false, status: 422, text: async () => 'expired api_user_key'}
+  }
+  assert.equal(values.api_user_key, 'refreshed-user-key')
+  return {ok: true, status: 200, text: async () => 'No pastes found.'}
 }
 
 await import('./background.js')
@@ -99,9 +113,17 @@ assert.deepEqual(localStorage.values.pastebinCredentials, {
   developerKey: 'developer-key',
   userKey: 'generated-user-key',
   username: 'pastebin-user',
+  password: 'pastebin-password',
 })
 const connected = await sendMessage({type: 'get-pastebin-connection'})
 assert.deepEqual(connected.response, {ok: true, connected: true})
+
+const refreshedState = await sendMessage({type: 'get-pastebin-state'})
+assert.equal(refreshedState.response.ok, true)
+assert.equal(refreshedState.response.error, undefined)
+assert.equal(loginCount, 2)
+assert.equal(localStorage.values.pastebinCredentials.userKey, 'refreshed-user-key')
+assert.equal(localStorage.values.pastebinCredentials.password, 'pastebin-password')
 
 assert.equal(messageListener({type: 'unknown'}, {}, () => {}), false)
 

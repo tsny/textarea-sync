@@ -118,4 +118,7 @@ make -C firefox-extension clean
 By default, documents remain in local extension storage. When Pastebin is
 connected, choosing **Update Pastebin now** sends the textarea URLs—and
 therefore their embedded contents—to the user's unlisted Pastebin paste. Treat
-this as convenient sharing, not end-to-end encrypted storage.
+this as convenient sharing, not end-to-end encrypted storage. While connected,
+the Pastebin password is retained unencrypted in local extension storage so an
+expired user key can be refreshed automatically; **Disconnect Pastebin** removes
+the stored Pastebin credentials.

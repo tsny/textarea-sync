@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict'
 import './pastebin.js'
 
-const {login, mergeDocuments, parsePasteList, parseSyncPaste, replace} = globalThis.TextareaPastebin
+const {
+  isAuthenticationError,
+  login,
+  mergeDocuments,
+  parsePasteList,
+  parseSyncPaste,
+  replace,
+} = globalThis.TextareaPastebin
 
 const credentials = {developerKey: 'developer-key', userKey: 'user-key'}
 
@@ -53,6 +60,19 @@ assert.equal(await login('dev', 'user', 'password', async (url, options) => {
   return {ok: true, status: 200, text: async () => 'session-key'}
 }), 'session-key')
 assert.equal(loginCalls[0].values.api_user_password, 'password')
+
+let authenticationError
+try {
+  await login('dev', 'user', 'password', async () => ({
+    ok: false,
+    status: 422,
+    text: async () => 'invalid api_user_key',
+  }))
+} catch (error) {
+  authenticationError = error
+}
+assert.match(authenticationError.message, /422.*invalid api_user_key/)
+assert.equal(isAuthenticationError(authenticationError), true)
 
 const apiCalls = []
 const remoteDocument = {

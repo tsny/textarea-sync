@@ -33,9 +33,9 @@ The popup can maintain an unlisted Pastebin JSON paste named `textarea.my sync`
 containing the latest textarea URL contributed by each connected device. The
 Pastebin account is the shared namespace, so it can bridge Chrome and Firefox.
 Supply a Pastebin developer API key, username, and password to connect. The
-password is sent directly to Pastebin once to obtain a user key and is never
-stored; only the developer key, generated user key, and username are retained
-in `chrome.storage.local`.
+password is stored in `chrome.storage.local` with the developer key, generated
+user key, and username so the extension can re-login and retry once when
+Pastebin reports an authentication failure. This local storage is not encrypted.
 When Pastebin is disconnected, `textarea.my` shows a setup prompt that opens the
 extension-owned connection form so credentials are not entered into the site.
 A persistent **Extension settings** button on `textarea.my` opens that form at

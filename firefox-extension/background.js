@@ -1,6 +1,11 @@
 const extensionApi = globalThis.browser ?? globalThis.chrome
 const {getLatest, saveLatest} = globalThis.TextareaDocumentStorage
-const {load: loadPastebin, login: loginPastebin, replace: replacePastebin} = globalThis.TextareaPastebin
+const {
+  isAuthenticationError: isPastebinAuthenticationError,
+  load: loadPastebin,
+  login: loginPastebin,
+  replace: replacePastebin,
+} = globalThis.TextareaPastebin
 const TEXTAREA_ORIGIN = 'https://textarea.my'
 const PASTEBIN_CREDENTIALS_KEY = 'pastebinCredentials'
 const PASTEBIN_DEVICE_ID_KEY = 'pastebinDeviceId'
@@ -30,11 +35,31 @@ async function getPastebinCredentials() {
 async function connectPastebin(message) {
   const developerKey = String(message.developerKey || '').trim()
   const username = String(message.username || '').trim()
-  const userKey = await loginPastebin(developerKey, username, String(message.password || ''))
+  const password = String(message.password || '')
+  const userKey = await loginPastebin(developerKey, username, password)
   await extensionApi.storage.local.set({
-    [PASTEBIN_CREDENTIALS_KEY]: {developerKey, userKey, username},
+    [PASTEBIN_CREDENTIALS_KEY]: {developerKey, userKey, username, password},
   })
   return {username}
+}
+
+async function withRefreshedPastebinKey(credentials, operation) {
+  try {
+    return await operation(credentials)
+  } catch (error) {
+    if (!isPastebinAuthenticationError(error) || !credentials.username || !credentials.password) {
+      throw error
+    }
+
+    const userKey = await loginPastebin(
+      credentials.developerKey,
+      credentials.username,
+      credentials.password
+    )
+    const refreshed = {...credentials, userKey}
+    await extensionApi.storage.local.set({[PASTEBIN_CREDENTIALS_KEY]: refreshed})
+    return operation(refreshed)
+  }
 }
 
 async function getPastebinState() {
@@ -43,7 +68,7 @@ async function getPastebinState() {
 
   const localState = await extensionApi.storage.local.get(PASTEBIN_LAST_URL_KEY)
   try {
-    const remote = await loadPastebin(credentials)
+    const remote = await withRefreshedPastebinKey(credentials, loadPastebin)
     return {
       connected: true,
       username: credentials.username,
@@ -68,12 +93,16 @@ async function syncLatestToPastebin() {
   if (!latest) throw new Error('Open and edit a textarea before syncing to Pastebin.')
 
   const deviceId = await getDeviceId()
-  const result = await replacePastebin(credentials, {
+  const localDocument = {
     deviceId,
     url: `${TEXTAREA_ORIGIN}${latest.path}`,
     title: latest.title,
     updatedAt: latest.savedAt,
-  })
+  }
+  const result = await withRefreshedPastebinKey(
+    credentials,
+    currentCredentials => replacePastebin(currentCredentials, localDocument)
+  )
   await extensionApi.storage.local.set({[PASTEBIN_LAST_URL_KEY]: result.pasteUrl})
   return result
 }

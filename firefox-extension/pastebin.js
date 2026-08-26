@@ -14,15 +14,28 @@ globalThis.TextareaPastebin = (() => {
       body: new URLSearchParams(values).toString(),
     })
     const text = (await response.text()).trim()
-    if (!response.ok) throw new Error(`Pastebin request failed (${response.status}).`)
+    if (!response.ok) {
+      const detail = text.replace(/\s+/g, ' ').slice(0, 200)
+      const error = new Error(
+        `Pastebin request failed (${response.status})${detail ? `: ${detail}` : ''}.`
+      )
+      error.pastebinStatus = response.status
+      throw error
+    }
     return text
   }
 
   function requireSuccess(text) {
     if (text.startsWith('Bad API request,')) {
-      throw new Error(text.replace(/^Bad API request,\s*/, 'Pastebin: '))
+      const error = new Error(text.replace(/^Bad API request,\s*/, 'Pastebin: '))
+      error.pastebinAuthFailure = /api_user_key|user key|login|not logged/i.test(text)
+      throw error
     }
     return text
+  }
+
+  function isAuthenticationError(error) {
+    return error?.pastebinAuthFailure === true || [401, 403, 422].includes(error?.pastebinStatus)
   }
 
   async function login(developerKey, username, password, fetchImpl = fetch) {
@@ -203,5 +216,5 @@ globalThis.TextareaPastebin = (() => {
     }
   }
 
-  return {load, login, mergeDocuments, parsePasteList, parseSyncPaste, replace}
+  return {isAuthenticationError, load, login, mergeDocuments, parsePasteList, parseSyncPaste, replace}
 })()
