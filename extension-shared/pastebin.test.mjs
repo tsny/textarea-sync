@@ -5,6 +5,7 @@ const {
   isAuthenticationError,
   login,
   mergeDocuments,
+  normalizeDocumentName,
   parsePasteList,
   parseSyncPaste,
   replace,
@@ -25,6 +26,12 @@ const xml = `
     <paste_title>Other &amp; unrelated</paste_title>
     <paste_url>https://pastebin.com/second</paste_url>
   </paste>
+  <paste>
+    <paste_key>unmanaged</paste_key>
+    <paste_date>300</paste_date>
+    <paste_title>textarea.my sync</paste_title>
+    <paste_url>https://pastebin.com/unmanaged</paste_url>
+  </paste>
 `
 
 assert.deepEqual(parsePasteList(xml), [
@@ -40,19 +47,38 @@ assert.deepEqual(parsePasteList(xml), [
     url: 'https://pastebin.com/second',
     createdAt: 200000,
   },
+  {
+    key: 'unmanaged',
+    title: 'textarea.my sync',
+    url: 'https://pastebin.com/unmanaged',
+    createdAt: 300000,
+  },
 ])
 
 assert.deepEqual(parseSyncPaste('{"version":1,"documents":[]}'), [])
-assert.deepEqual(parseSyncPaste('not json'), [])
+assert.equal(parseSyncPaste('not json'), null)
+assert.equal(normalizeDocumentName('  Work notes  '), 'Work notes')
+assert.equal(normalizeDocumentName(''), '')
 
 const oldDocument = {
-  deviceId: 'DEVICE-A',
+  name: 'Draft',
   url: 'https://textarea.my/#old',
   title: 'Old',
   updatedAt: 100,
+  updatedByDeviceId: 'DEVICE-A',
 }
 const newDocument = {...oldDocument, url: 'https://textarea.my/#newer', updatedAt: 200}
 assert.deepEqual(mergeDocuments([[oldDocument], [newDocument]]), [newDocument])
+assert.equal(
+  mergeDocuments([[{
+    deviceId: 'DEVICE-A',
+    deviceName: 'Work laptop',
+    url: 'https://textarea.my/#legacy',
+    title: 'Textarea',
+    updatedAt: 50,
+  }]])[0].name,
+  'Work laptop'
+)
 
 const loginCalls = []
 assert.equal(await login('dev', 'user', 'password', async (url, options) => {
@@ -76,10 +102,11 @@ assert.equal(isAuthenticationError(authenticationError), true)
 
 const apiCalls = []
 const remoteDocument = {
-  deviceId: 'DEVICE-B',
+  name: 'Shopping list',
   url: 'https://textarea.my/#remote',
   title: 'Remote',
   updatedAt: 150,
+  updatedByDeviceId: 'DEVICE-B',
 }
 
 async function mockFetch(url, options) {
@@ -88,7 +115,9 @@ async function mockFetch(url, options) {
   let text = ''
   if (values.api_option === 'list') text = xml
   if (values.api_option === 'show_paste') {
-    text = JSON.stringify({version: 1, documents: [remoteDocument]})
+    text = values.api_paste_key === 'unmanaged'
+      ? 'This belongs to another Pastebin workflow.'
+      : JSON.stringify({version: 1, documents: [remoteDocument]})
   }
   if (values.api_option === 'paste') text = 'https://pastebin.com/replacement'
   if (values.api_option === 'delete') text = 'Paste Removed'
@@ -103,7 +132,9 @@ assert.equal(apiCalls.filter(call => call.values.api_option === 'delete').length
 
 const createCall = apiCalls.find(call => call.values.api_option === 'paste')
 const payload = JSON.parse(createCall.values.api_paste_code)
-assert.equal(payload.version, 1)
+assert.equal(createCall.values.api_paste_name, 'textarea.my sync')
+assert.equal(payload.app, 'textarea-sync')
+assert.equal(payload.version, 2)
 assert.deepEqual(payload.documents, [newDocument, remoteDocument])
 
 console.log('Shared Pastebin tests passed')

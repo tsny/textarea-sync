@@ -29,21 +29,35 @@ node ../scripts/sync-extension-shared.mjs --write
 
 ## Optional Pastebin sync
 
-The popup can maintain an unlisted Pastebin JSON paste named `textarea.my sync`
-containing the latest textarea URL contributed by each connected device. The
-Pastebin account is the shared namespace, so it can bridge Chrome and Firefox.
+The popup maintains one unlisted Pastebin JSON index whose name is always
+`textarea.my sync`. That fixed paste contains the named textarea documents
+shared by every connected device. The Pastebin account is the shared namespace,
+so it can bridge Chrome and Firefox.
 Supply a Pastebin developer API key, username, and password to connect. The
 password is stored in `chrome.storage.local` with the developer key, generated
 user key, and username so the extension can re-login and retry once when
 Pastebin reports an authentication failure. This local storage is not encrypted.
 When Pastebin is disconnected, `textarea.my` shows a setup prompt that opens the
 extension-owned connection form so credentials are not entered into the site.
-A persistent **Extension settings** button on `textarea.my` opens that form at
-any time.
+A persistent **Actions** menu on `textarea.my` has a document-name field, can
+save the current document immediately, or open **Extension settings** at any
+time.
 
-Pastebin does not provide an edit API. **Update Pastebin now** reads and merges
+Pastebin does not provide an edit API. **Save** reads and merges
 matching sync pastes, creates a replacement, and removes older copies. Updates
 are manual to avoid creating a new paste after every textarea edit.
+
+Enter a document name before saving, or leave it blank to generate a timestamped
+name automatically. Reusing a name updates that document.
+**New document** saves the current document before opening a blank textarea.
+Click a name under **Documents** to select and open it; the list also shows when
+each document was last updated. Opened documents use that name as the browser
+tab title. **Refresh user key** explicitly performs the same re-login used by
+automatic authentication recovery.
+
+Editing a named document prefixes its tab title with `*`. Refreshing, closing,
+or navigating away before a successful Pastebin save shows the browser's
+unsaved-changes warning.
 
 Because the document is embedded in a `textarea.my` URL fragment, enabling this
 feature uploads the document contents to Pastebin. Unlisted pastes are not
@@ -57,5 +71,5 @@ characters are supported.
 ## Privacy
 
 By default, the URL remains in local extension storage. If Pastebin is
-connected, choosing **Update Pastebin now** sends the stored textarea URLs to
+connected, choosing **Save** sends the stored textarea URLs to
 the user's Pastebin account.

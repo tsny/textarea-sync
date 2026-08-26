@@ -3,6 +3,42 @@
   let timer
   let lastSentUrl = ''
   let pastebinPrompt
+  let syncedDocumentName = ''
+  let actionsDocumentNameInput
+  let documentArticle
+  let documentIsDirty = false
+
+  function applySyncedDocumentTitle() {
+    const title = documentIsDirty ? `* ${syncedDocumentName}` : syncedDocumentName
+    if (title && document.title !== title) {
+      document.title = title
+    }
+  }
+
+  function setDocumentDirty(dirty) {
+    documentIsDirty = Boolean(dirty && syncedDocumentName)
+    applySyncedDocumentTitle()
+  }
+
+  function loadSyncedDocumentTitle() {
+    return extensionApi.runtime.sendMessage({
+      type: 'get-pastebin-document-title',
+      url: location.href,
+    }).then(response => {
+      if (response?.ok && response.name) {
+        if (syncedDocumentName && response.name !== syncedDocumentName) {
+          documentIsDirty = false
+        }
+        syncedDocumentName = response.name
+        if (actionsDocumentNameInput && !actionsDocumentNameInput.matches(':focus')) {
+          actionsDocumentNameInput.value = syncedDocumentName
+        }
+        applySyncedDocumentTitle()
+      }
+    }).catch(() => {
+      // The extension may have been reloaded while this tab stayed open.
+    })
+  }
 
   function openExtensionSettings(button, onError) {
     button.disabled = true
@@ -14,7 +50,39 @@
       .finally(() => { button.disabled = false })
   }
 
-  function showSettingsButton() {
+  async function saveCurrentDocument(button, status, requestedName = syncedDocumentName) {
+    if (!location.hash || location.hash === '#new') {
+      throw new Error('Start typing in the new document before saving it.')
+    }
+
+    button.disabled = true
+    status.textContent = 'Saving…'
+    try {
+      const localResponse = await extensionApi.runtime.sendMessage({
+        type: 'save-current',
+        url: location.href,
+        title: requestedName || syncedDocumentName || document.title,
+      })
+      if (!localResponse?.ok) {
+        throw new Error(localResponse?.error || 'Unable to capture the current document.')
+      }
+      const response = await extensionApi.runtime.sendMessage({
+        type: 'sync-pastebin',
+        documentName: requestedName,
+      })
+      if (!response?.ok) throw new Error(response?.error || 'Unable to save the document.')
+      syncedDocumentName = response.documentName
+      if (actionsDocumentNameInput) actionsDocumentNameInput.value = syncedDocumentName
+      setDocumentDirty(false)
+      status.textContent = response.deletionFailures
+        ? 'Saved; an older Pastebin copy could not be removed.'
+        : 'Saved.'
+    } finally {
+      button.disabled = false
+    }
+  }
+
+  function showActionsMenu() {
     const host = document.createElement('div')
     const shadow = host.attachShadow({mode: 'closed'})
     const style = document.createElement('style')
@@ -26,7 +94,7 @@
         top: max(8px, env(safe-area-inset-top));
         z-index: 2147483647;
       }
-      button {
+      .trigger {
         appearance: none;
         background: rgba(248, 248, 248, .94);
         border: 1px solid rgba(0, 0, 0, .2);
@@ -38,26 +106,147 @@
         min-height: 32px;
         padding: 6px 10px;
       }
-      button:hover { background: #fff; }
+      .trigger:hover { background: #fff; }
+      .menu {
+        background: rgba(248, 248, 248, .98);
+        border: 1px solid rgba(0, 0, 0, .2);
+        border-radius: 9px;
+        box-shadow: 0 4px 16px rgba(0, 0, 0, .18);
+        box-sizing: border-box;
+        margin-top: 6px;
+        padding: 5px;
+        position: absolute;
+        right: 0;
+        width: 210px;
+      }
+      .menu[hidden] { display: none; }
+      .menu button {
+        appearance: none;
+        background: transparent;
+        border: 0;
+        border-radius: 6px;
+        color: #3b3b3b;
+        cursor: pointer;
+        display: block;
+        font: 600 12px/1.2 system-ui, sans-serif;
+        min-height: 36px;
+        padding: 8px 9px;
+        text-align: left;
+        width: 100%;
+      }
+      .menu button:hover { background: rgba(0, 0, 0, .07); }
+      label {
+        color: #555;
+        display: block;
+        font: 600 11px/1.2 system-ui, sans-serif;
+        padding: 5px 9px 3px;
+      }
+      input {
+        background: #fff;
+        border: 1px solid rgba(0, 0, 0, .25);
+        border-radius: 5px;
+        box-sizing: border-box;
+        color: #222;
+        display: block;
+        font: 12px/1.2 system-ui, sans-serif;
+        margin: 0 5px 5px;
+        min-height: 34px;
+        padding: 7px 8px;
+        width: calc(100% - 10px);
+      }
+      .status {
+        color: #666;
+        font: 11px/1.3 system-ui, sans-serif;
+        margin: 3px 9px 5px;
+      }
+      .status:empty { display: none; }
       button:disabled { cursor: default; opacity: .6; }
       button:focus-visible { outline: 2px solid #0569fa; outline-offset: 2px; }
       @media (prefers-color-scheme: dark) {
-        button {
+        .trigger {
           background: rgba(42, 42, 42, .94);
           border-color: rgba(255, 255, 255, .25);
           color: #e8e8e8;
         }
-        button:hover { background: #333; }
+        .trigger:hover { background: #333; }
+        .menu {
+          background: rgba(42, 42, 42, .98);
+          border-color: rgba(255, 255, 255, .25);
+        }
+        .menu button { color: #e8e8e8; }
+        .menu button:hover { background: rgba(255, 255, 255, .1); }
+        label { color: #bbb; }
+        input {
+          background: #252525;
+          border-color: rgba(255, 255, 255, .25);
+          color: #eee;
+        }
+        .status { color: #bbb; }
       }
     `
-    const button = document.createElement('button')
-    button.type = 'button'
-    button.textContent = 'Extension settings'
-    button.title = 'Open Textarea Sync settings'
-    button.addEventListener('click', () => {
-      openExtensionSettings(button, error => { button.title = error.message })
+    const trigger = document.createElement('button')
+    trigger.className = 'trigger'
+    trigger.type = 'button'
+    trigger.textContent = 'Actions ▾'
+    trigger.setAttribute('aria-expanded', 'false')
+    trigger.setAttribute('aria-haspopup', 'dialog')
+    const menu = document.createElement('div')
+    menu.className = 'menu'
+    menu.hidden = true
+    menu.setAttribute('role', 'dialog')
+    menu.setAttribute('aria-label', 'Textarea Sync actions')
+    const nameLabel = document.createElement('label')
+    nameLabel.textContent = 'Document name'
+    const nameInput = document.createElement('input')
+    nameInput.type = 'text'
+    nameInput.maxLength = 100
+    nameInput.placeholder = 'Generated if blank'
+    nameInput.value = syncedDocumentName
+    nameLabel.append(nameInput)
+    actionsDocumentNameInput = nameInput
+    const saveButton = document.createElement('button')
+    saveButton.type = 'button'
+    saveButton.textContent = 'Save current document'
+    const settingsButton = document.createElement('button')
+    settingsButton.type = 'button'
+    settingsButton.textContent = 'Extension settings'
+    const status = document.createElement('p')
+    status.className = 'status'
+    status.setAttribute('aria-live', 'polite')
+    menu.append(nameLabel, saveButton, settingsButton, status)
+
+    function setMenuOpen(open) {
+      menu.hidden = !open
+      trigger.setAttribute('aria-expanded', String(open))
+    }
+
+    trigger.addEventListener('click', () => setMenuOpen(menu.hidden))
+    function saveFromMenu() {
+      saveCurrentDocument(saveButton, status, nameInput.value.trim()).catch(error => {
+        status.textContent = error.message
+      })
+    }
+    saveButton.addEventListener('click', saveFromMenu)
+    nameInput.addEventListener('keydown', event => {
+      if (event.key === 'Enter') {
+        event.preventDefault()
+        saveFromMenu()
+      }
     })
-    shadow.append(style, button)
+    settingsButton.addEventListener('click', () => {
+      setMenuOpen(false)
+      openExtensionSettings(settingsButton, error => {
+        status.textContent = error.message
+        setMenuOpen(true)
+      })
+    })
+    document.addEventListener('pointerdown', event => {
+      if (!event.composedPath().includes(host)) setMenuOpen(false)
+    })
+    document.addEventListener('keydown', event => {
+      if (event.key === 'Escape') setMenuOpen(false)
+    })
+    shadow.append(style, trigger, menu)
     document.documentElement.append(host)
   }
 
@@ -121,7 +310,6 @@
     const heading = document.createElement('strong')
     heading.textContent = 'Connect Pastebin'
     const description = document.createElement('p')
-    description.textContent = 'Add your Pastebin API key and login to sync this textarea across browsers.'
     const actions = document.createElement('div')
     const setupButton = document.createElement('button')
     setupButton.type = 'button'
@@ -155,7 +343,11 @@
     const url = location.href
     if (!location.hash || location.hash === '#new' || url === lastSentUrl) return
     lastSentUrl = url
-    extensionApi.runtime.sendMessage({type: 'save-current', url, title: document.title})
+    extensionApi.runtime.sendMessage({
+      type: 'save-current',
+      url,
+      title: syncedDocumentName || document.title,
+    })
       .then(response => {
         if (!response?.ok) lastSentUrl = ''
       })
@@ -170,16 +362,40 @@
     timer = setTimeout(sendCurrentUrl, delay)
   }
 
-  addEventListener('pageshow', () => scheduleSave(0))
-  addEventListener('hashchange', () => scheduleSave(0))
-  addEventListener('popstate', () => scheduleSave(0))
-  addEventListener('input', () => scheduleSave(), true)
+  addEventListener('pageshow', () => {
+    loadSyncedDocumentTitle()
+    scheduleSave(0)
+  })
+  addEventListener('hashchange', () => {
+    loadSyncedDocumentTitle()
+    scheduleSave(0)
+  })
+  addEventListener('popstate', () => {
+    loadSyncedDocumentTitle()
+    scheduleSave(0)
+  })
+  addEventListener('input', event => {
+    scheduleSave()
+    if (documentArticle?.contains(event.target)) setDocumentDirty(true)
+  }, true)
+
+  addEventListener('beforeunload', event => {
+    if (!documentIsDirty || !syncedDocumentName) return
+    event.preventDefault()
+    event.returnValue = ''
+  })
 
   addEventListener('DOMContentLoaded', () => {
-    showSettingsButton()
-    const article = document.querySelector('article')
-    if (article) {
-      new MutationObserver(() => scheduleSave()).observe(article, {
+    showActionsMenu()
+    loadSyncedDocumentTitle()
+    new MutationObserver(applySyncedDocumentTitle).observe(document.head, {
+      childList: true,
+      characterData: true,
+      subtree: true,
+    })
+    documentArticle = document.querySelector('article')
+    if (documentArticle) {
+      new MutationObserver(() => scheduleSave()).observe(documentArticle, {
         attributes: true,
         attributeFilter: ['style'],
         childList: true,
@@ -194,6 +410,14 @@
   extensionApi.storage.onChanged.addListener((changes, areaName) => {
     if (areaName === 'local' && changes.pastebinCredentials?.newValue) {
       hidePastebinPrompt()
+    }
+    if (areaName === 'local' && changes.pastebinDocuments?.newValue) {
+      loadSyncedDocumentTitle()
+    }
+    const savedDocument = changes.pastebinLastSavedDocument?.newValue
+    if (areaName === 'local' && savedDocument?.url === location.href &&
+        savedDocument.name === syncedDocumentName) {
+      setDocumentDirty(false)
     }
   })
 })()

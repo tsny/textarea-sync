@@ -54,15 +54,22 @@ globalThis.fetch = async (_url, options) => {
     return {
       ok: true,
       status: 200,
-      text: async () => loginCount === 1 ? 'generated-user-key' : 'refreshed-user-key',
+      text: async () => loginCount === 1 ? 'generated-user-key' : `refreshed-user-key-${loginCount}`,
     }
   }
-  assert.equal(values.api_option, 'list')
   if (values.api_user_key === 'generated-user-key') {
+    assert.equal(values.api_option, 'list')
     return {ok: false, status: 422, text: async () => 'expired api_user_key'}
   }
-  assert.equal(values.api_user_key, 'refreshed-user-key')
-  return {ok: true, status: 200, text: async () => 'No pastes found.'}
+  assert.match(values.api_user_key, /^refreshed-user-key-/)
+  if (values.api_option === 'list') {
+    return {ok: true, status: 200, text: async () => 'No pastes found.'}
+  }
+  if (values.api_option === 'paste') {
+    assert.equal(values.api_paste_name, 'textarea.my sync')
+    return {ok: true, status: 200, text: async () => 'https://pastebin.com/replacement'}
+  }
+  assert.fail(`Unexpected Pastebin operation: ${values.api_option}`)
 }
 
 await import('./background.js')
@@ -118,12 +125,79 @@ assert.deepEqual(localStorage.values.pastebinCredentials, {
 const connected = await sendMessage({type: 'get-pastebin-connection'})
 assert.deepEqual(connected.response, {ok: true, connected: true})
 
+await localStorage.set({
+  pastebinDeviceId: '0464E599',
+  pastebinDocumentName: 'Work notes',
+})
 const refreshedState = await sendMessage({type: 'get-pastebin-state'})
 assert.equal(refreshedState.response.ok, true)
 assert.equal(refreshedState.response.error, undefined)
+assert.equal(refreshedState.response.documentName, 'Work notes')
 assert.equal(loginCount, 2)
-assert.equal(localStorage.values.pastebinCredentials.userKey, 'refreshed-user-key')
+assert.equal(localStorage.values.pastebinCredentials.userKey, 'refreshed-user-key-2')
 assert.equal(localStorage.values.pastebinCredentials.password, 'pastebin-password')
+
+await localStorage.set({
+  pastebinDocuments: [
+    {
+      name: 'Shared note',
+      url: 'https://textarea.my/#shared',
+      title: 'Textarea',
+      updatedAt: 100,
+    },
+    {
+      name: 'Work notes',
+      url: 'https://textarea.my/#shared',
+      title: 'Textarea',
+      updatedAt: 100,
+    },
+  ],
+})
+const documentTitle = await sendMessage(
+  {type: 'get-pastebin-document-title', url: 'https://textarea.my/#shared'},
+  {url: 'https://textarea.my/#shared'}
+)
+assert.deepEqual(documentTitle.response, {ok: true, name: 'Work notes'})
+const unknownDocumentTitle = await sendMessage(
+  {type: 'get-pastebin-document-title', url: 'https://textarea.my/#unknown'},
+  {url: 'https://textarea.my/#unknown'}
+)
+assert.deepEqual(unknownDocumentTitle.response, {ok: true, name: null})
+
+const manualRefresh = await sendMessage({type: 'refresh-pastebin-key'})
+assert.deepEqual(manualRefresh.response, {ok: true})
+assert.equal(loginCount, 3)
+assert.equal(localStorage.values.pastebinCredentials.userKey, 'refreshed-user-key-3')
+
+const selectDocument = await sendMessage({
+  type: 'select-pastebin-document',
+  documentName: ' Personal notes ',
+})
+assert.deepEqual(selectDocument.response, {ok: true, documentName: 'Personal notes'})
+assert.equal(localStorage.values.pastebinDocumentName, 'Personal notes')
+
+const startNewDocument = await sendMessage({type: 'start-new-pastebin-document'})
+assert.deepEqual(startNewDocument.response, {ok: true})
+assert.equal(localStorage.values.pastebinDocumentName, '')
+const newDocumentState = await sendMessage({type: 'get-pastebin-state'})
+assert.equal(newDocumentState.response.documentName, '')
+
+const autoNamedSave = await sendMessage({type: 'sync-pastebin', documentName: ''})
+assert.equal(autoNamedSave.response.ok, true)
+assert.match(autoNamedSave.response.documentName, /^Document \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)
+assert.equal(localStorage.values.pastebinDocumentName, autoNamedSave.response.documentName)
+assert.equal(localStorage.values.pastebinDocuments[0].name, autoNamedSave.response.documentName)
+assert.deepEqual(
+  {
+    name: localStorage.values.pastebinLastSavedDocument.name,
+    url: localStorage.values.pastebinLastSavedDocument.url,
+  },
+  {
+    name: autoNamedSave.response.documentName,
+    url: 'https://textarea.my/#shared',
+  }
+)
+assert.equal(Number.isFinite(localStorage.values.pastebinLastSavedDocument.savedAt), true)
 
 assert.equal(messageListener({type: 'unknown'}, {}, () => {}), false)
 

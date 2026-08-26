@@ -7,7 +7,10 @@ const pastebinStatus = document.querySelector('#pastebin-status')
 const pastebinForm = document.querySelector('#pastebin-form')
 const pastebinConnected = document.querySelector('#pastebin-connected')
 const pastebinAccount = document.querySelector('#pastebin-account')
-const pastebinSync = document.querySelector('#pastebin-sync')
+const pastebinDocumentName = document.querySelector('#pastebin-document-name')
+const pastebinSave = document.querySelector('#pastebin-save')
+const pastebinNew = document.querySelector('#pastebin-new')
+const pastebinRefreshKey = document.querySelector('#pastebin-refresh-key')
 const pastebinOpen = document.querySelector('#pastebin-open')
 const pastebinDisconnect = document.querySelector('#pastebin-disconnect')
 const pastebinDocuments = document.querySelector('#pastebin-documents')
@@ -19,7 +22,7 @@ let pastebinUrl = null
 extensionApi.runtime.sendMessage({type: 'get-latest'}).then(response => {
   if (!response?.ok) throw new Error(response?.error || 'Local extension storage is unavailable.')
   if (!response.document) {
-    status.textContent = 'No document has been synced yet.'
+    status.textContent = 'No local document has been saved yet.'
     return
   }
 
@@ -40,8 +43,23 @@ openButton.addEventListener('click', () => {
 
 function setPastebinBusy(busy) {
   for (const element of pastebinForm.elements) element.disabled = busy
-  pastebinSync.disabled = busy
+  pastebinSave.disabled = busy
+  pastebinNew.disabled = busy
+  pastebinDocumentName.disabled = busy
+  pastebinRefreshKey.disabled = busy
   pastebinDisconnect.disabled = busy
+}
+
+function formatUpdatedAgo(updatedAt) {
+  const elapsedMinutes = Math.max(0, Math.floor((Date.now() - Number(updatedAt)) / 60000))
+  if (elapsedMinutes < 60) return `${elapsedMinutes} min ago`
+
+  const elapsedHours = Math.floor(elapsedMinutes / 60)
+  if (elapsedHours < 24) return `${elapsedHours} hr${elapsedHours === 1 ? '' : 's'} ago`
+
+  const elapsedDays = Math.floor(elapsedHours / 24)
+  if (elapsedDays < 7) return `${elapsedDays} day${elapsedDays === 1 ? '' : 's'} ago`
+  return new Date(updatedAt).toLocaleDateString()
 }
 
 function renderDocuments(documents = []) {
@@ -50,13 +68,27 @@ function renderDocuments(documents = []) {
   for (const syncedDocument of documents) {
     const item = document.createElement('li')
     const button = document.createElement('button')
+    const name = document.createElement('span')
+    const updated = document.createElement('span')
     button.type = 'button'
-    button.textContent = `${syncedDocument.title} · device ${syncedDocument.deviceId}`
-    button.title = `Updated ${new Date(syncedDocument.updatedAt).toLocaleString()}`
-    button.addEventListener('click', () => {
-      extensionApi.tabs.create({url: syncedDocument.url})
-      window.close()
+    name.className = 'document-list-name'
+    name.textContent = syncedDocument.name
+    updated.className = 'document-list-updated'
+    updated.textContent = formatUpdatedAgo(syncedDocument.updatedAt)
+    button.title = `${syncedDocument.title} · Updated ${new Date(syncedDocument.updatedAt).toLocaleString()}`
+    button.addEventListener('click', async () => {
+      const response = await extensionApi.runtime.sendMessage({
+        type: 'select-pastebin-document',
+        documentName: syncedDocument.name,
+      })
+      if (response?.ok) {
+        extensionApi.tabs.create({url: syncedDocument.url})
+        window.close()
+      } else {
+        pastebinStatus.textContent = response?.error || 'Unable to select the document.'
+      }
     })
+    button.append(name, updated)
     item.append(button)
     pastebinDocuments.append(item)
   }
@@ -72,7 +104,8 @@ function showPastebinState(state) {
   }
 
   pastebinAccount.textContent = `Connected as ${state.username}`
-  pastebinStatus.textContent = state.error || 'Ready. Updates happen only when you choose “Update Pastebin now.”'
+  pastebinDocumentName.value = state.documentName
+  pastebinStatus.textContent = state.error || 'Ready. Changes are shared when you choose Save.'
   pastebinUrl = state.pasteUrl
   pastebinOpen.hidden = !pastebinUrl
   renderDocuments(state.documents)
@@ -103,16 +136,55 @@ pastebinForm.addEventListener('submit', async event => {
   }
 })
 
-pastebinSync.addEventListener('click', async () => {
+async function saveCurrentDocument() {
+  pastebinStatus.textContent = 'Saving document…'
+  const response = await extensionApi.runtime.sendMessage({
+    type: 'sync-pastebin',
+    documentName: pastebinDocumentName.value,
+  })
+  if (!response?.ok) throw new Error(response?.error || 'Unable to save the document.')
+  pastebinDocumentName.value = response.documentName
+  pastebinStatus.textContent = response.deletionFailures
+    ? 'Saved, but Pastebin could not remove every older copy.'
+    : 'Document saved.'
+  pastebinUrl = response.pasteUrl
+  pastebinOpen.hidden = !pastebinUrl
+  renderDocuments(response.documents)
+  return response
+}
+
+pastebinSave.addEventListener('click', async () => {
   setPastebinBusy(true)
-  pastebinStatus.textContent = 'Creating the replacement paste…'
   try {
-    const response = await extensionApi.runtime.sendMessage({type: 'sync-pastebin'})
-    if (!response?.ok) throw new Error(response?.error || 'Unable to update Pastebin.')
-    pastebinStatus.textContent = response.deletionFailures
-      ? 'Updated, but Pastebin could not remove every older copy.'
-      : 'Pastebin updated.'
-    await loadPastebinState()
+    await saveCurrentDocument()
+  } catch (error) {
+    pastebinStatus.textContent = error.message
+  } finally {
+    setPastebinBusy(false)
+  }
+})
+
+pastebinNew.addEventListener('click', async () => {
+  setPastebinBusy(true)
+  try {
+    await saveCurrentDocument()
+    const response = await extensionApi.runtime.sendMessage({type: 'start-new-pastebin-document'})
+    if (!response?.ok) throw new Error(response?.error || 'Unable to start a new document.')
+    await extensionApi.tabs.create({url: 'https://textarea.my/#new'})
+    window.close()
+  } catch (error) {
+    pastebinStatus.textContent = error.message
+    setPastebinBusy(false)
+  }
+})
+
+pastebinRefreshKey.addEventListener('click', async () => {
+  setPastebinBusy(true)
+  pastebinStatus.textContent = 'Refreshing Pastebin user key…'
+  try {
+    const response = await extensionApi.runtime.sendMessage({type: 'refresh-pastebin-key'})
+    if (!response?.ok) throw new Error(response?.error || 'Unable to refresh the user key.')
+    pastebinStatus.textContent = 'Pastebin user key refreshed.'
   } catch (error) {
     pastebinStatus.textContent = error.message
   } finally {

@@ -79,11 +79,29 @@ section {
   padding-top: 14px;
 }
 
-form label {
+form label,
+.setting-label {
   display: block;
   font-size: 12px;
   font-weight: 600;
   margin-bottom: 10px;
+}
+
+.document-name-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.document-name-controls input {
+  flex: 1 1 auto;
+  margin-top: 0;
+  min-width: 0;
+}
+
+.document-name-controls button {
+  flex: 0 0 auto;
+  min-height: 36px;
+  width: auto;
 }
 
 input {
@@ -109,6 +127,10 @@ input:focus-visible {
   font-weight: 600;
 }
 
+.compact-hint {
+  margin-top: 6px;
+}
+
 #pastebin-documents {
   list-style: none;
   margin: 0;
@@ -120,14 +142,29 @@ input:focus-visible {
 }
 
 #pastebin-documents button {
+  align-items: center;
   background: transparent;
   border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
   color: inherit;
+  display: flex;
+  gap: 8px;
   min-height: 38px;
-  overflow: hidden;
   text-align: left;
+}
+
+.document-list-name {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.document-list-updated {
+  color: #777;
+  flex: 0 0 auto;
+  font-size: 11px;
+  font-weight: 400;
 }
 
 .hint {

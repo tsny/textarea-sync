@@ -38,6 +38,10 @@ globalThis.TextareaPastebin = (() => {
     return error?.pastebinAuthFailure === true || [401, 403, 422].includes(error?.pastebinStatus)
   }
 
+  function normalizeDocumentName(value) {
+    return String(value || '').trim().slice(0, 100)
+  }
+
   async function login(developerKey, username, password, fetchImpl = fetch) {
     if (!developerKey || !username || !password) {
       throw new Error('Pastebin developer key, username, and password are required.')
@@ -130,14 +134,17 @@ globalThis.TextareaPastebin = (() => {
       return null
     }
     if (url.origin !== 'https://textarea.my' || !url.hash || url.hash === '#new') return null
-    if (typeof document.deviceId !== 'string' || !document.deviceId) return null
+    const deviceId = typeof document.deviceId === 'string' ? document.deviceId.slice(0, 50) : ''
+    const name = normalizeDocumentName(document.name || document.deviceName || document.title)
+    if (!name) return null
     const updatedAt = Number(document.updatedAt)
     if (!Number.isFinite(updatedAt)) return null
     return {
-      deviceId: document.deviceId.slice(0, 50),
+      name,
       url: url.href,
       title: String(document.title || 'Textarea').slice(0, 200),
       updatedAt,
+      updatedByDeviceId: String(document.updatedByDeviceId || deviceId).slice(0, 50),
     }
   }
 
@@ -146,9 +153,10 @@ globalThis.TextareaPastebin = (() => {
     for (const group of groups) {
       for (const value of group) {
         const document = normalizeDocument(value)
-        const existing = document && documents.get(document.deviceId)
+        const key = document?.name.toLocaleLowerCase()
+        const existing = document && documents.get(key)
         if (document && (!existing || document.updatedAt > existing.updatedAt)) {
-          documents.set(document.deviceId, document)
+          documents.set(key, document)
         }
       }
     }
@@ -158,22 +166,27 @@ globalThis.TextareaPastebin = (() => {
   function parseSyncPaste(contents) {
     try {
       const data = JSON.parse(contents)
-      if (data?.version !== 1 || !Array.isArray(data.documents)) return []
+      if (![1, 2].includes(data?.version) || !Array.isArray(data.documents)) return null
       return data.documents
     } catch {
-      return []
+      return null
     }
   }
 
   async function load(credentials, fetchImpl = fetch) {
-    const pastes = (await listPastes(credentials, fetchImpl))
+    const candidates = (await listPastes(credentials, fetchImpl))
       .filter(paste => paste.title === SYNC_TITLE)
       .sort((a, b) => b.createdAt - a.createdAt)
       .slice(0, MAX_SOURCE_PASTES)
     const groups = []
-    for (const paste of pastes) {
+    const pastes = []
+    for (const paste of candidates) {
       try {
-        groups.push(parseSyncPaste(await readPaste(credentials, paste.key, fetchImpl)))
+        const documents = parseSyncPaste(await readPaste(credentials, paste.key, fetchImpl))
+        if (documents) {
+          groups.push(documents)
+          pastes.push(paste)
+        }
       } catch {
         // A malformed or deleted copy should not hide the other valid copies.
       }
@@ -185,7 +198,12 @@ globalThis.TextareaPastebin = (() => {
     const kept = documents.slice(0, MAX_DOCUMENTS)
     let payload
     do {
-      payload = JSON.stringify({version: 1, updatedAt: Date.now(), documents: kept}, null, 2)
+      payload = JSON.stringify({
+        app: 'textarea-sync',
+        version: 2,
+        updatedAt: Date.now(),
+        documents: kept,
+      }, null, 2)
       if (payload.length <= MAX_PAYLOAD_LENGTH) return payload
       kept.pop()
     } while (kept.length)
@@ -216,5 +234,14 @@ globalThis.TextareaPastebin = (() => {
     }
   }
 
-  return {isAuthenticationError, load, login, mergeDocuments, parsePasteList, parseSyncPaste, replace}
+  return {
+    isAuthenticationError,
+    load,
+    login,
+    mergeDocuments,
+    normalizeDocumentName,
+    parsePasteList,
+    parseSyncPaste,
+    replace,
+  }
 })()

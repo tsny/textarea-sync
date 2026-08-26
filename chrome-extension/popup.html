@@ -35,9 +35,17 @@
 
     <div id="pastebin-connected" hidden>
       <p id="pastebin-account"></p>
-      <button id="pastebin-sync" type="button">Update Pastebin now</button>
+      <p class="hint">Sync index: <code>textarea.my sync</code> (fixed)</p>
+      <label id="pastebin-document-name-label" class="setting-label" for="pastebin-document-name">Current document name</label>
+      <div class="document-name-controls">
+        <input id="pastebin-document-name" type="text" maxlength="100" aria-labelledby="pastebin-document-name-label">
+        <button id="pastebin-save" type="button">Save</button>
+      </div>
+      <button id="pastebin-new" class="secondary" type="button">New document</button>
+      <p class="hint compact-hint">Leave the name blank to generate one. New document saves first, then opens a blank textarea.</p>
+      <button id="pastebin-refresh-key" class="secondary" type="button">Refresh user key</button>
       <button id="pastebin-open" class="secondary" type="button" hidden>Open sync paste</button>
-      <h3 id="pastebin-documents-heading" hidden>Synced devices</h3>
+      <h3 id="pastebin-documents-heading" hidden>Documents</h3>
       <ul id="pastebin-documents" aria-labelledby="pastebin-documents-heading"></ul>
       <button id="pastebin-disconnect" class="text-button" type="button">Disconnect Pastebin</button>
       <p class="hint">Textarea contents are embedded in their URLs and will be stored in an unlisted Pastebin paste.</p>

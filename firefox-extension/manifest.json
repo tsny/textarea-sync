@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Textarea Sync",
   "description": "Save your latest textarea.my document locally and share it across devices with Pastebin.",
-  "version": "0.1.3",
+  "version": "0.1.14",
   "permissions": ["storage"],
   "host_permissions": ["https://textarea.my/*", "https://pastebin.com/*"],
   "background": {

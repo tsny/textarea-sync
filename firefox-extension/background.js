@@ -4,11 +4,15 @@ const {
   isAuthenticationError: isPastebinAuthenticationError,
   load: loadPastebin,
   login: loginPastebin,
+  normalizeDocumentName,
   replace: replacePastebin,
 } = globalThis.TextareaPastebin
 const TEXTAREA_ORIGIN = 'https://textarea.my'
 const PASTEBIN_CREDENTIALS_KEY = 'pastebinCredentials'
 const PASTEBIN_DEVICE_ID_KEY = 'pastebinDeviceId'
+const PASTEBIN_DOCUMENT_NAME_KEY = 'pastebinDocumentName'
+const PASTEBIN_DOCUMENTS_KEY = 'pastebinDocuments'
+const PASTEBIN_LAST_SAVED_DOCUMENT_KEY = 'pastebinLastSavedDocument'
 const PASTEBIN_LAST_URL_KEY = 'pastebinLastUrl'
 let saveQueue = Promise.resolve()
 let deviceIdRequest = null
@@ -43,6 +47,22 @@ async function connectPastebin(message) {
   return {username}
 }
 
+async function refreshPastebinCredentials(credentials) {
+  if (!credentials) credentials = await getPastebinCredentials()
+  if (!credentials) throw new Error('Connect a Pastebin account first.')
+  if (!credentials.username || !credentials.password) {
+    throw new Error('Reconnect Pastebin once to store the password needed to refresh the user key.')
+  }
+  const userKey = await loginPastebin(
+    credentials.developerKey,
+    credentials.username,
+    credentials.password
+  )
+  const refreshed = {...credentials, userKey}
+  await extensionApi.storage.local.set({[PASTEBIN_CREDENTIALS_KEY]: refreshed})
+  return refreshed
+}
+
 async function withRefreshedPastebinKey(credentials, operation) {
   try {
     return await operation(credentials)
@@ -51,13 +71,7 @@ async function withRefreshedPastebinKey(credentials, operation) {
       throw error
     }
 
-    const userKey = await loginPastebin(
-      credentials.developerKey,
-      credentials.username,
-      credentials.password
-    )
-    const refreshed = {...credentials, userKey}
-    await extensionApi.storage.local.set({[PASTEBIN_CREDENTIALS_KEY]: refreshed})
+    const refreshed = await refreshPastebinCredentials(credentials)
     return operation(refreshed)
   }
 }
@@ -67,11 +81,19 @@ async function getPastebinState() {
   if (!credentials) return {connected: false}
 
   const localState = await extensionApi.storage.local.get(PASTEBIN_LAST_URL_KEY)
+  const nameState = await extensionApi.storage.local.get(PASTEBIN_DOCUMENT_NAME_KEY)
+  const latest = await getLatest(extensionApi.storage.local)
+  const hasSelectedDocument = Object.hasOwn(nameState, PASTEBIN_DOCUMENT_NAME_KEY)
+  const documentName = normalizeDocumentName(
+    hasSelectedDocument ? nameState[PASTEBIN_DOCUMENT_NAME_KEY] : latest?.title || 'Textarea'
+  )
   try {
     const remote = await withRefreshedPastebinKey(credentials, loadPastebin)
+    await extensionApi.storage.local.set({[PASTEBIN_DOCUMENTS_KEY]: remote.documents})
     return {
       connected: true,
       username: credentials.username,
+      documentName,
       documents: remote.documents,
       pasteUrl: remote.pastes[0]?.url || localState[PASTEBIN_LAST_URL_KEY] || null,
     }
@@ -79,6 +101,7 @@ async function getPastebinState() {
     return {
       connected: true,
       username: credentials.username,
+      documentName,
       documents: [],
       pasteUrl: localState[PASTEBIN_LAST_URL_KEY] || null,
       error: error.message,
@@ -86,25 +109,64 @@ async function getPastebinState() {
   }
 }
 
-async function syncLatestToPastebin() {
+function createDocumentName() {
+  const now = new Date()
+  const pad = value => String(value).padStart(2, '0')
+  const timestamp = `${now.getFullYear()}-${pad(now.getMonth() + 1)}-${pad(now.getDate())} ` +
+    `${pad(now.getHours())}:${pad(now.getMinutes())}:${pad(now.getSeconds())}`
+  return `Document ${timestamp}`
+}
+
+async function syncLatestToPastebin(requestedDocumentName) {
   const credentials = await getPastebinCredentials()
   if (!credentials) throw new Error('Connect a Pastebin account first.')
   const latest = await getLatest(extensionApi.storage.local)
   if (!latest) throw new Error('Open and edit a textarea before syncing to Pastebin.')
 
   const deviceId = await getDeviceId()
+  const name = normalizeDocumentName(requestedDocumentName) || createDocumentName()
+  await extensionApi.storage.local.set({[PASTEBIN_DOCUMENT_NAME_KEY]: name})
   const localDocument = {
-    deviceId,
+    name,
     url: `${TEXTAREA_ORIGIN}${latest.path}`,
     title: latest.title,
     updatedAt: latest.savedAt,
+    updatedByDeviceId: deviceId,
   }
   const result = await withRefreshedPastebinKey(
     credentials,
     currentCredentials => replacePastebin(currentCredentials, localDocument)
   )
-  await extensionApi.storage.local.set({[PASTEBIN_LAST_URL_KEY]: result.pasteUrl})
-  return result
+  await extensionApi.storage.local.set({
+    [PASTEBIN_DOCUMENTS_KEY]: result.documents,
+    [PASTEBIN_LAST_SAVED_DOCUMENT_KEY]: {
+      name,
+      url: localDocument.url,
+      savedAt: Date.now(),
+    },
+    [PASTEBIN_LAST_URL_KEY]: result.pasteUrl,
+  })
+  return {...result, documentName: name}
+}
+
+async function getPastebinDocumentTitle(value) {
+  const document = documentFromUrl(value)
+  if (!document) return null
+  const url = `${TEXTAREA_ORIGIN}${document.path}`
+  const state = await extensionApi.storage.local.get([
+    PASTEBIN_DOCUMENT_NAME_KEY,
+    PASTEBIN_DOCUMENTS_KEY,
+  ])
+  const documents = Array.isArray(state[PASTEBIN_DOCUMENTS_KEY])
+    ? state[PASTEBIN_DOCUMENTS_KEY]
+    : []
+  const matchingDocuments = documents.filter(candidate => candidate?.url === url)
+  const selectedName = normalizeDocumentName(state[PASTEBIN_DOCUMENT_NAME_KEY])
+  const match = matchingDocuments.find(candidate => (
+    selectedName && normalizeDocumentName(candidate.name).toLocaleLowerCase() ===
+      selectedName.toLocaleLowerCase()
+  )) || matchingDocuments[0]
+  return match ? normalizeDocumentName(match.name) : null
 }
 
 function documentFromUrl(value, title = 'Textarea') {
@@ -165,6 +227,16 @@ function handleMessage(message, sender) {
       .catch(error => ({ok: false, error: error.message}))
   }
 
+  if (message?.type === 'get-pastebin-document-title') {
+    const senderUrl = sender.url || sender.tab?.url
+    if (!senderUrl?.startsWith(`${TEXTAREA_ORIGIN}/`)) {
+      return {ok: false, error: 'Document titles are available only on textarea.my.'}
+    }
+    return getPastebinDocumentTitle(message.url || senderUrl)
+      .then(name => ({ok: true, name}))
+      .catch(error => ({ok: false, error: error.message}))
+  }
+
   if (message?.type === 'connect-pastebin') {
     return connectPastebin(message)
       .then(result => ({ok: true, ...result}))
@@ -174,6 +246,26 @@ function handleMessage(message, sender) {
   if (message?.type === 'get-pastebin-state') {
     return getPastebinState()
       .then(state => ({ok: true, ...state}))
+      .catch(error => ({ok: false, error: error.message}))
+  }
+
+  if (message?.type === 'refresh-pastebin-key') {
+    return refreshPastebinCredentials()
+      .then(() => ({ok: true}))
+      .catch(error => ({ok: false, error: error.message}))
+  }
+
+  if (message?.type === 'select-pastebin-document') {
+    const name = normalizeDocumentName(message.documentName)
+    if (!name) return {ok: false, error: 'Document name is invalid.'}
+    return extensionApi.storage.local.set({[PASTEBIN_DOCUMENT_NAME_KEY]: name})
+      .then(() => ({ok: true, documentName: name}))
+      .catch(error => ({ok: false, error: error.message}))
+  }
+
+  if (message?.type === 'start-new-pastebin-document') {
+    return extensionApi.storage.local.set({[PASTEBIN_DOCUMENT_NAME_KEY]: ''})
+      .then(() => ({ok: true}))
       .catch(error => ({ok: false, error: error.message}))
   }
 
@@ -194,13 +286,18 @@ function handleMessage(message, sender) {
   }
 
   if (message?.type === 'sync-pastebin') {
-    return syncLatestToPastebin()
+    return syncLatestToPastebin(message.documentName)
       .then(result => ({ok: true, ...result}))
       .catch(error => ({ok: false, error: error.message}))
   }
 
   if (message?.type === 'disconnect-pastebin') {
-    return extensionApi.storage.local.remove([PASTEBIN_CREDENTIALS_KEY, PASTEBIN_LAST_URL_KEY])
+    return extensionApi.storage.local.remove([
+      PASTEBIN_CREDENTIALS_KEY,
+      PASTEBIN_DOCUMENTS_KEY,
+      PASTEBIN_LAST_SAVED_DOCUMENT_KEY,
+      PASTEBIN_LAST_URL_KEY,
+    ])
       .then(() => ({ok: true}))
       .catch(error => ({ok: false, error: error.message}))
   }
