@@ -38,6 +38,8 @@ stored; only the developer key, generated user key, and username are retained
 in `chrome.storage.local`.
 When Pastebin is disconnected, `textarea.my` shows a setup prompt that opens the
 extension-owned connection form so credentials are not entered into the site.
+A persistent **Extension settings** button on `textarea.my` opens that form at
+any time.
 
 Pastebin does not provide an edit API. **Update Pastebin now** reads and merges
 matching sync pastes, creates a replacement, and removes older copies. Updates

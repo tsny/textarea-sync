@@ -4,6 +4,63 @@
   let lastSentUrl = ''
   let pastebinPrompt
 
+  function openExtensionSettings(button, onError) {
+    button.disabled = true
+    extensionApi.runtime.sendMessage({type: 'open-pastebin-setup'})
+      .then(response => {
+        if (!response?.ok) throw new Error(response?.error || 'Unable to open extension settings.')
+      })
+      .catch(onError)
+      .finally(() => { button.disabled = false })
+  }
+
+  function showSettingsButton() {
+    const host = document.createElement('div')
+    const shadow = host.attachShadow({mode: 'closed'})
+    const style = document.createElement('style')
+    style.textContent = `
+      :host {
+        all: initial;
+        position: fixed;
+        right: max(8px, env(safe-area-inset-right));
+        top: max(8px, env(safe-area-inset-top));
+        z-index: 2147483647;
+      }
+      button {
+        appearance: none;
+        background: rgba(248, 248, 248, .94);
+        border: 1px solid rgba(0, 0, 0, .2);
+        border-radius: 999px;
+        box-shadow: 0 1px 4px rgba(0, 0, 0, .12);
+        color: #3b3b3b;
+        cursor: pointer;
+        font: 600 11px/1.2 system-ui, sans-serif;
+        min-height: 32px;
+        padding: 6px 10px;
+      }
+      button:hover { background: #fff; }
+      button:disabled { cursor: default; opacity: .6; }
+      button:focus-visible { outline: 2px solid #0569fa; outline-offset: 2px; }
+      @media (prefers-color-scheme: dark) {
+        button {
+          background: rgba(42, 42, 42, .94);
+          border-color: rgba(255, 255, 255, .25);
+          color: #e8e8e8;
+        }
+        button:hover { background: #333; }
+      }
+    `
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.textContent = 'Extension settings'
+    button.title = 'Open Textarea Sync settings'
+    button.addEventListener('click', () => {
+      openExtensionSettings(button, error => { button.title = error.message })
+    })
+    shadow.append(style, button)
+    document.documentElement.append(host)
+  }
+
   function hidePastebinPrompt() {
     pastebinPrompt?.remove()
     pastebinPrompt = null
@@ -79,15 +136,7 @@
     pastebinPrompt = host
 
     setupButton.addEventListener('click', () => {
-      setupButton.disabled = true
-      extensionApi.runtime.sendMessage({type: 'open-pastebin-setup'})
-        .then(response => {
-          if (!response?.ok) throw new Error(response?.error || 'Unable to open Pastebin setup.')
-        })
-        .catch(error => {
-          description.textContent = error.message
-          setupButton.disabled = false
-        })
+      openExtensionSettings(setupButton, error => { description.textContent = error.message })
     })
     dismissButton.addEventListener('click', hidePastebinPrompt)
   }
@@ -127,6 +176,7 @@
   addEventListener('input', () => scheduleSave(), true)
 
   addEventListener('DOMContentLoaded', () => {
+    showSettingsButton()
     const article = document.querySelector('article')
     if (article) {
       new MutationObserver(() => scheduleSave()).observe(article, {
