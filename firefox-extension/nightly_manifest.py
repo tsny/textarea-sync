@@ -22,7 +22,7 @@ def main():
 
     manifest["name"] = "Textarea Sync Nightly"
     manifest["description"] = (
-        "Nightly build of Textarea Sync with local storage and Pastebin sharing."
+        "Nightly build of Textarea Sync with local storage and GitHub Gist sharing."
     )
     manifest["version"] = args.version
     manifest["browser_specific_settings"]["gecko"]["id"] = args.id

@@ -2,9 +2,10 @@
   const extensionApi = globalThis.browser ?? globalThis.chrome
   let timer
   let lastSentUrl = ''
-  let pastebinPrompt
+  let githubPrompt
   let syncedDocumentName = ''
   let actionsDocumentNameInput
+  let actionsRecentDocumentsSection
   let documentArticle
   let documentIsDirty = false
 
@@ -22,7 +23,7 @@
 
   function loadSyncedDocumentTitle() {
     return extensionApi.runtime.sendMessage({
-      type: 'get-pastebin-document-title',
+      type: 'get-gist-document-title',
       url: location.href,
     }).then(response => {
       if (response?.ok && response.name) {
@@ -33,6 +34,7 @@
         if (actionsDocumentNameInput && !actionsDocumentNameInput.matches(':focus')) {
           actionsDocumentNameInput.value = syncedDocumentName
         }
+        if (actionsRecentDocumentsSection) actionsRecentDocumentsSection.hidden = true
         applySyncedDocumentTitle()
       }
     }).catch(() => {
@@ -42,7 +44,7 @@
 
   function openExtensionSettings(button, onError) {
     button.disabled = true
-    extensionApi.runtime.sendMessage({type: 'open-pastebin-setup'})
+    extensionApi.runtime.sendMessage({type: 'open-sync-setup'})
       .then(response => {
         if (!response?.ok) throw new Error(response?.error || 'Unable to open extension settings.')
       })
@@ -67,16 +69,15 @@
         throw new Error(localResponse?.error || 'Unable to capture the current document.')
       }
       const response = await extensionApi.runtime.sendMessage({
-        type: 'sync-pastebin',
+        type: 'sync-gist',
         documentName: requestedName,
       })
       if (!response?.ok) throw new Error(response?.error || 'Unable to save the document.')
       syncedDocumentName = response.documentName
       if (actionsDocumentNameInput) actionsDocumentNameInput.value = syncedDocumentName
+      if (actionsRecentDocumentsSection) actionsRecentDocumentsSection.hidden = true
       setDocumentDirty(false)
-      status.textContent = response.deletionFailures
-        ? 'Saved; an older Pastebin copy could not be removed.'
-        : 'Saved.'
+      status.textContent = 'Saved.'
     } finally {
       button.disabled = false
     }
@@ -160,6 +161,23 @@
         margin: 3px 9px 5px;
       }
       .status:empty { display: none; }
+      .recent-documents {
+        border-top: 1px solid rgba(0, 0, 0, .14);
+        margin-top: 5px;
+        padding-top: 5px;
+      }
+      .recent-documents[hidden] { display: none; }
+      .recent-heading {
+        color: #666;
+        font: 600 10px/1.2 system-ui, sans-serif;
+        margin: 4px 9px 3px;
+        text-transform: uppercase;
+      }
+      .recent-documents button {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
       button:disabled { cursor: default; opacity: .6; }
       button:focus-visible { outline: 2px solid #0569fa; outline-offset: 2px; }
       @media (prefers-color-scheme: dark) {
@@ -182,6 +200,8 @@
           color: #eee;
         }
         .status { color: #bbb; }
+        .recent-documents { border-top-color: rgba(255, 255, 255, .16); }
+        .recent-heading { color: #aaa; }
       }
     `
     const trigger = document.createElement('button')
@@ -213,14 +233,70 @@
     const status = document.createElement('p')
     status.className = 'status'
     status.setAttribute('aria-live', 'polite')
-    menu.append(nameLabel, saveButton, settingsButton, status)
+    const recentDocumentsSection = document.createElement('div')
+    recentDocumentsSection.className = 'recent-documents'
+    recentDocumentsSection.hidden = true
+    const recentHeading = document.createElement('p')
+    recentHeading.className = 'recent-heading'
+    recentHeading.textContent = 'Recent documents'
+    const recentDocuments = document.createElement('div')
+    recentDocumentsSection.append(recentHeading, recentDocuments)
+    actionsRecentDocumentsSection = recentDocumentsSection
+    menu.append(nameLabel, saveButton, settingsButton, status, recentDocumentsSection)
+
+    async function loadRecentDocuments() {
+      if (syncedDocumentName) {
+        recentDocumentsSection.hidden = true
+        return
+      }
+      const response = await extensionApi.runtime.sendMessage({
+        type: 'get-recent-gist-documents',
+      })
+      if (!response?.ok || syncedDocumentName) {
+        recentDocumentsSection.hidden = true
+        return
+      }
+      recentDocuments.replaceChildren()
+      for (const recentDocument of response.documents) {
+        const button = document.createElement('button')
+        button.type = 'button'
+        button.textContent = recentDocument.name
+        button.title = `Switch to ${recentDocument.name}`
+        button.addEventListener('click', async () => {
+          if (location.hash && location.hash !== '#new' &&
+              !confirm('This unsaved document will be replaced. Switch documents?')) {
+            return
+          }
+          button.disabled = true
+          status.textContent = 'Switching…'
+          const selectResponse = await extensionApi.runtime.sendMessage({
+            type: 'select-gist-document',
+            documentName: recentDocument.name,
+          })
+          if (!selectResponse?.ok) {
+            button.disabled = false
+            status.textContent = selectResponse?.error || 'Unable to switch documents.'
+            return
+          }
+          location.assign(recentDocument.url)
+        })
+        recentDocuments.append(button)
+      }
+      recentDocumentsSection.hidden = response.documents.length === 0
+    }
 
     function setMenuOpen(open) {
       menu.hidden = !open
       trigger.setAttribute('aria-expanded', String(open))
     }
 
-    trigger.addEventListener('click', () => setMenuOpen(menu.hidden))
+    trigger.addEventListener('click', () => {
+      const open = menu.hidden
+      setMenuOpen(open)
+      if (open) loadRecentDocuments().catch(() => {
+        recentDocumentsSection.hidden = true
+      })
+    })
     function saveFromMenu() {
       saveCurrentDocument(saveButton, status, nameInput.value.trim()).catch(error => {
         status.textContent = error.message
@@ -250,13 +326,13 @@
     document.documentElement.append(host)
   }
 
-  function hidePastebinPrompt() {
-    pastebinPrompt?.remove()
-    pastebinPrompt = null
+  function hideGitHubPrompt() {
+    githubPrompt?.remove()
+    githubPrompt = null
   }
 
-  function showPastebinPrompt() {
-    if (pastebinPrompt) return
+  function showGitHubPrompt() {
+    if (githubPrompt) return
 
     const host = document.createElement('div')
     const shadow = host.attachShadow({mode: 'closed'})
@@ -306,14 +382,15 @@
     `
     const panel = document.createElement('aside')
     panel.setAttribute('role', 'dialog')
-    panel.setAttribute('aria-label', 'Connect Pastebin')
+    panel.setAttribute('aria-label', 'Connect GitHub')
     const heading = document.createElement('strong')
-    heading.textContent = 'Connect Pastebin'
+    heading.textContent = 'Connect GitHub'
     const description = document.createElement('p')
+    description.textContent = 'Add a GitHub token with Gist access to sync this textarea across browsers.'
     const actions = document.createElement('div')
     const setupButton = document.createElement('button')
     setupButton.type = 'button'
-    setupButton.textContent = 'Set up Pastebin'
+    setupButton.textContent = 'Set up GitHub'
     const dismissButton = document.createElement('button')
     dismissButton.type = 'button'
     dismissButton.textContent = 'Not now'
@@ -321,18 +398,18 @@
     panel.append(heading, description, actions)
     shadow.append(style, panel)
     document.documentElement.append(host)
-    pastebinPrompt = host
+    githubPrompt = host
 
     setupButton.addEventListener('click', () => {
       openExtensionSettings(setupButton, error => { description.textContent = error.message })
     })
-    dismissButton.addEventListener('click', hidePastebinPrompt)
+    dismissButton.addEventListener('click', hideGitHubPrompt)
   }
 
-  function checkPastebinConnection() {
-    extensionApi.runtime.sendMessage({type: 'get-pastebin-connection'})
+  function checkGitHubConnection() {
+    extensionApi.runtime.sendMessage({type: 'get-github-connection'})
       .then(response => {
-        if (response?.ok && !response.connected) showPastebinPrompt()
+        if (response?.ok && !response.connected) showGitHubPrompt()
       })
       .catch(() => {
         // The extension may have been reloaded while this tab stayed open.
@@ -403,18 +480,18 @@
         subtree: true,
       })
     }
-    checkPastebinConnection()
+    checkGitHubConnection()
     scheduleSave(0)
   })
 
   extensionApi.storage.onChanged.addListener((changes, areaName) => {
-    if (areaName === 'local' && changes.pastebinCredentials?.newValue) {
-      hidePastebinPrompt()
+    if (areaName === 'local' && changes.githubCredentials?.newValue) {
+      hideGitHubPrompt()
     }
-    if (areaName === 'local' && changes.pastebinDocuments?.newValue) {
+    if (areaName === 'local' && changes.gistDocuments?.newValue) {
       loadSyncedDocumentTitle()
     }
-    const savedDocument = changes.pastebinLastSavedDocument?.newValue
+    const savedDocument = changes.gistLastSavedDocument?.newValue
     if (areaName === 'local' && savedDocument?.url === location.href &&
         savedDocument.name === syncedDocumentName) {
       setDocumentDirty(false)

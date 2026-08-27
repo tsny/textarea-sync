@@ -1,75 +1,18 @@
-# Textarea Sync Chrome extension
+# Textarea Sync for Chrome
 
-This extension saves the most recently edited `textarea.my` URL in local
-extension storage. Pastebin provides optional cross-device sharing.
-
-## Install locally
+## Install
 
 1. Open `chrome://extensions`.
-2. Enable **Developer mode**.
-3. Choose **Load unpacked** and select this `chrome-extension` directory.
-4. Connect the same Pastebin account on another device to share documents.
+2. Turn on Developer mode.
+3. Choose Load unpacked.
+4. Select this folder.
 
-The manifest includes a public `key` so unpacked copies use the same extension
-ID on both computers. (The key is an identifier, not a credential.) A published
-Chrome Web Store build receives a stable extension ID from the store instead.
-
-## Build the upload
-
-Run `make package` to create the Chrome Web Store ZIP in `dist/`. Run
-`make test` for shared unit, manifest, drift, and syntax checks. Mozilla's
-`web-ext lint` targets Firefox manifests and is run from `firefox-extension/`.
-
-The runtime files are generated from the repository's `extension-shared/`
-directory. After editing shared source, run:
+Connect GitHub with a token that has Gist access. The extension creates one
+secret Gist named `textarea.my sync` and updates it in place.
 
 ```sh
-node ../scripts/sync-extension-shared.mjs --write
+make test
+make package
 ```
 
-## Optional Pastebin sync
-
-The popup maintains one unlisted Pastebin JSON index whose name is always
-`textarea.my sync`. That fixed paste contains the named textarea documents
-shared by every connected device. The Pastebin account is the shared namespace,
-so it can bridge Chrome and Firefox.
-Supply a Pastebin developer API key, username, and password to connect. The
-password is stored in `chrome.storage.local` with the developer key, generated
-user key, and username so the extension can re-login and retry once when
-Pastebin reports an authentication failure. This local storage is not encrypted.
-When Pastebin is disconnected, `textarea.my` shows a setup prompt that opens the
-extension-owned connection form so credentials are not entered into the site.
-A persistent **Actions** menu on `textarea.my` has a document-name field, can
-save the current document immediately, or open **Extension settings** at any
-time.
-
-Pastebin does not provide an edit API. **Save** reads and merges
-matching sync pastes, creates a replacement, and removes older copies. Updates
-are manual to avoid creating a new paste after every textarea edit.
-
-Enter a document name before saving, or leave it blank to generate a timestamped
-name automatically. Reusing a name updates that document.
-**New document** saves the current document before opening a blank textarea.
-Click a name under **Documents** to select and open it; the list also shows when
-each document was last updated. Opened documents use that name as the browser
-tab title. **Refresh user key** explicitly performs the same re-login used by
-automatic authentication recovery.
-
-Editing a named document prefixes its tab title with `*`. Refreshing, closing,
-or navigating away before a successful Pastebin save shows the browser's
-unsaved-changes warning.
-
-Because the document is embedded in a `textarea.my` URL fragment, enabling this
-feature uploads the document contents to Pastebin. Unlisted pastes are not
-end-to-end encrypted and should not contain secrets.
-
-The extension watches textarea edits automatically. Because a textarea document
-is stored in its URL fragment, the locally stored URL contains the document
-itself. Only the latest local document is retained. Paths up to 95,000
-characters are supported.
-
-## Privacy
-
-By default, the URL remains in local extension storage. If Pastebin is
-connected, choosing **Save** sends the stored textarea URLs to
-the user's Pastebin account.
+Secret Gists are unlisted, not encrypted. Do not save secrets.

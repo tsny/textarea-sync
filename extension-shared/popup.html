@@ -9,46 +9,37 @@
   <p id="status" aria-live="polite">Looking for your latest local document…</p>
   <p id="details" hidden></p>
   <button id="open" type="button" disabled>Open latest textarea</button>
-  <p class="hint">Saved on this device until you update Pastebin.</p>
+  <p class="hint">Saved on this device until you save to GitHub.</p>
 
-  <section aria-labelledby="pastebin-heading">
-    <h2 id="pastebin-heading">Pastebin sync</h2>
-    <p id="pastebin-status" class="hint" aria-live="polite">Checking connection…</p>
+  <section aria-labelledby="gist-heading">
+    <h2 id="gist-heading">GitHub Gist sync</h2>
+    <p id="gist-status" class="hint" aria-live="polite">Checking connection…</p>
 
-    <form id="pastebin-form" hidden>
+    <form id="github-form" hidden>
       <label>
-        Developer API key
-        <input name="developerKey" type="password" required autocomplete="off">
+        GitHub token
+        <input name="token" type="password" required autocomplete="off">
       </label>
-      <label>
-        Pastebin username
-        <input name="username" type="text" required autocomplete="username">
-      </label>
-      <label>
-        Pastebin password
-        <input name="password" type="password" required autocomplete="current-password">
-      </label>
-      <button type="submit">Connect Pastebin</button>
-      <p class="hint">Your password is stored in this browser's extension storage so an expired Pastebin user key can be refreshed automatically.</p>
-      <button id="pastebin-api-help" class="text-button" type="button">Where to find the API key</button>
+      <button type="submit">Connect GitHub</button>
+      <p class="hint">The token is stored in this browser's extension storage. It needs Gist access.</p>
+      <button id="github-token-help" class="text-button" type="button">Create a GitHub token</button>
     </form>
 
-    <div id="pastebin-connected" hidden>
-      <p id="pastebin-account"></p>
-      <p class="hint">Sync index: <code>textarea.my sync</code> (fixed)</p>
-      <label id="pastebin-document-name-label" class="setting-label" for="pastebin-document-name">Current document name</label>
+    <div id="github-connected" hidden>
+      <p id="github-account"></p>
+      <p class="hint">One secret Gist stores <code>textarea-sync.json</code>.</p>
+      <label id="gist-document-name-label" class="setting-label" for="gist-document-name">Current document name</label>
       <div class="document-name-controls">
-        <input id="pastebin-document-name" type="text" maxlength="100" aria-labelledby="pastebin-document-name-label">
-        <button id="pastebin-save" type="button">Save</button>
+        <input id="gist-document-name" type="text" maxlength="100" aria-labelledby="gist-document-name-label">
+        <button id="gist-save" type="button">Save</button>
       </div>
-      <button id="pastebin-new" class="secondary" type="button">New document</button>
+      <button id="gist-new" class="secondary" type="button">New document</button>
       <p class="hint compact-hint">Leave the name blank to generate one. New document saves first, then opens a blank textarea.</p>
-      <button id="pastebin-refresh-key" class="secondary" type="button">Refresh user key</button>
-      <button id="pastebin-open" class="secondary" type="button" hidden>Open sync paste</button>
-      <h3 id="pastebin-documents-heading" hidden>Documents</h3>
-      <ul id="pastebin-documents" aria-labelledby="pastebin-documents-heading"></ul>
-      <button id="pastebin-disconnect" class="text-button" type="button">Disconnect Pastebin</button>
-      <p class="hint">Textarea contents are embedded in their URLs and will be stored in an unlisted Pastebin paste.</p>
+      <button id="gist-open" class="secondary" type="button" hidden>Open sync Gist</button>
+      <h3 id="gist-documents-heading" hidden>Documents</h3>
+      <ul id="gist-documents" aria-labelledby="gist-documents-heading"></ul>
+      <button id="github-disconnect" class="text-button" type="button">Disconnect GitHub</button>
+      <p class="hint">Textarea contents are embedded in their URLs and stored in a secret Gist.</p>
     </div>
   </section>
 </main>

@@ -1,23 +1,22 @@
 const extensionApi = globalThis.browser ?? globalThis.chrome
-const {capturePastebinCredentials} = globalThis.TextareaPopupForm
+const {captureGitHubCredentials} = globalThis.TextareaPopupForm
 const status = document.querySelector('#status')
 const details = document.querySelector('#details')
 const openButton = document.querySelector('#open')
-const pastebinStatus = document.querySelector('#pastebin-status')
-const pastebinForm = document.querySelector('#pastebin-form')
-const pastebinConnected = document.querySelector('#pastebin-connected')
-const pastebinAccount = document.querySelector('#pastebin-account')
-const pastebinDocumentName = document.querySelector('#pastebin-document-name')
-const pastebinSave = document.querySelector('#pastebin-save')
-const pastebinNew = document.querySelector('#pastebin-new')
-const pastebinRefreshKey = document.querySelector('#pastebin-refresh-key')
-const pastebinOpen = document.querySelector('#pastebin-open')
-const pastebinDisconnect = document.querySelector('#pastebin-disconnect')
-const pastebinDocuments = document.querySelector('#pastebin-documents')
-const pastebinDocumentsHeading = document.querySelector('#pastebin-documents-heading')
-const pastebinApiHelp = document.querySelector('#pastebin-api-help')
+const gistStatus = document.querySelector('#gist-status')
+const githubForm = document.querySelector('#github-form')
+const githubConnected = document.querySelector('#github-connected')
+const githubAccount = document.querySelector('#github-account')
+const gistDocumentName = document.querySelector('#gist-document-name')
+const gistSave = document.querySelector('#gist-save')
+const gistNew = document.querySelector('#gist-new')
+const gistOpen = document.querySelector('#gist-open')
+const githubDisconnect = document.querySelector('#github-disconnect')
+const gistDocuments = document.querySelector('#gist-documents')
+const gistDocumentsHeading = document.querySelector('#gist-documents-heading')
+const githubTokenHelp = document.querySelector('#github-token-help')
 let latest = null
-let pastebinUrl = null
+let gistUrl = null
 
 extensionApi.runtime.sendMessage({type: 'get-latest'}).then(response => {
   if (!response?.ok) throw new Error(response?.error || 'Local extension storage is unavailable.')
@@ -25,7 +24,6 @@ extensionApi.runtime.sendMessage({type: 'get-latest'}).then(response => {
     status.textContent = 'No local document has been saved yet.'
     return
   }
-
   latest = response.document
   status.textContent = latest.title
   details.textContent = `Saved ${new Date(latest.savedAt).toLocaleString()}`
@@ -41,30 +39,27 @@ openButton.addEventListener('click', () => {
   window.close()
 })
 
-function setPastebinBusy(busy) {
-  for (const element of pastebinForm.elements) element.disabled = busy
-  pastebinSave.disabled = busy
-  pastebinNew.disabled = busy
-  pastebinDocumentName.disabled = busy
-  pastebinRefreshKey.disabled = busy
-  pastebinDisconnect.disabled = busy
+function setGitHubBusy(busy) {
+  for (const element of githubForm.elements) element.disabled = busy
+  gistSave.disabled = busy
+  gistNew.disabled = busy
+  gistDocumentName.disabled = busy
+  githubDisconnect.disabled = busy
 }
 
 function formatUpdatedAgo(updatedAt) {
   const elapsedMinutes = Math.max(0, Math.floor((Date.now() - Number(updatedAt)) / 60000))
   if (elapsedMinutes < 60) return `${elapsedMinutes} min ago`
-
   const elapsedHours = Math.floor(elapsedMinutes / 60)
   if (elapsedHours < 24) return `${elapsedHours} hr${elapsedHours === 1 ? '' : 's'} ago`
-
   const elapsedDays = Math.floor(elapsedHours / 24)
   if (elapsedDays < 7) return `${elapsedDays} day${elapsedDays === 1 ? '' : 's'} ago`
   return new Date(updatedAt).toLocaleDateString()
 }
 
 function renderDocuments(documents = []) {
-  pastebinDocuments.replaceChildren()
-  pastebinDocumentsHeading.hidden = documents.length === 0
+  gistDocuments.replaceChildren()
+  gistDocumentsHeading.hidden = documents.length === 0
   for (const syncedDocument of documents) {
     const item = document.createElement('li')
     const button = document.createElement('button')
@@ -78,142 +73,127 @@ function renderDocuments(documents = []) {
     button.title = `${syncedDocument.title} · Updated ${new Date(syncedDocument.updatedAt).toLocaleString()}`
     button.addEventListener('click', async () => {
       const response = await extensionApi.runtime.sendMessage({
-        type: 'select-pastebin-document',
+        type: 'select-gist-document',
         documentName: syncedDocument.name,
       })
       if (response?.ok) {
         extensionApi.tabs.create({url: syncedDocument.url})
         window.close()
       } else {
-        pastebinStatus.textContent = response?.error || 'Unable to select the document.'
+        gistStatus.textContent = response?.error || 'Unable to select the document.'
       }
     })
     button.append(name, updated)
     item.append(button)
-    pastebinDocuments.append(item)
+    gistDocuments.append(item)
   }
 }
 
-function showPastebinState(state) {
-  pastebinForm.hidden = state.connected
-  pastebinConnected.hidden = !state.connected
+function showGistState(state) {
+  githubForm.hidden = state.connected
+  githubConnected.hidden = !state.connected
   if (!state.connected) {
-    pastebinStatus.textContent = 'Connect your account to maintain an unlisted cross-device sync paste.'
-    pastebinUrl = null
+    gistStatus.textContent = 'Connect GitHub to sync documents across devices.'
+    gistUrl = null
     return
   }
-
-  pastebinAccount.textContent = `Connected as ${state.username}`
-  pastebinDocumentName.value = state.documentName
-  pastebinStatus.textContent = state.error || 'Ready. Changes are shared when you choose Save.'
-  pastebinUrl = state.pasteUrl
-  pastebinOpen.hidden = !pastebinUrl
+  githubAccount.textContent = `Connected as ${state.username}`
+  gistDocumentName.value = state.documentName
+  gistStatus.textContent = state.error || 'Ready. Changes are shared when you choose Save.'
+  gistUrl = state.gistUrl
+  gistOpen.hidden = !gistUrl
   renderDocuments(state.documents)
 }
 
-async function loadPastebinState() {
-  const response = await extensionApi.runtime.sendMessage({type: 'get-pastebin-state'})
-  if (!response?.ok) throw new Error(response?.error || 'Unable to check Pastebin.')
-  showPastebinState(response)
+async function loadGistState() {
+  const response = await extensionApi.runtime.sendMessage({type: 'get-gist-state'})
+  if (!response?.ok) throw new Error(response?.error || 'Unable to check GitHub.')
+  showGistState(response)
 }
 
-pastebinForm.addEventListener('submit', async event => {
+githubForm.addEventListener('submit', async event => {
   event.preventDefault()
-  const credentials = capturePastebinCredentials(pastebinForm, setPastebinBusy)
-  pastebinStatus.textContent = 'Connecting to Pastebin…'
+  const credentials = captureGitHubCredentials(githubForm, setGitHubBusy)
+  gistStatus.textContent = 'Connecting to GitHub…'
   try {
     const response = await extensionApi.runtime.sendMessage({
-      type: 'connect-pastebin',
+      type: 'connect-github',
       ...credentials,
     })
-    if (!response?.ok) throw new Error(response?.error || 'Unable to connect Pastebin.')
-    pastebinForm.reset()
-    await loadPastebinState()
+    if (!response?.ok) throw new Error(response?.error || 'Unable to connect GitHub.')
+    githubForm.reset()
+    await loadGistState()
   } catch (error) {
-    pastebinStatus.textContent = error.message
+    gistStatus.textContent = error.message
   } finally {
-    setPastebinBusy(false)
+    setGitHubBusy(false)
   }
 })
 
 async function saveCurrentDocument() {
-  pastebinStatus.textContent = 'Saving document…'
+  gistStatus.textContent = 'Saving document…'
   const response = await extensionApi.runtime.sendMessage({
-    type: 'sync-pastebin',
-    documentName: pastebinDocumentName.value,
+    type: 'sync-gist',
+    documentName: gistDocumentName.value,
   })
   if (!response?.ok) throw new Error(response?.error || 'Unable to save the document.')
-  pastebinDocumentName.value = response.documentName
-  pastebinStatus.textContent = response.deletionFailures
-    ? 'Saved, but Pastebin could not remove every older copy.'
-    : 'Document saved.'
-  pastebinUrl = response.pasteUrl
-  pastebinOpen.hidden = !pastebinUrl
+  gistDocumentName.value = response.documentName
+  gistStatus.textContent = 'Document saved.'
+  gistUrl = response.gistUrl
+  gistOpen.hidden = !gistUrl
   renderDocuments(response.documents)
   return response
 }
 
-pastebinSave.addEventListener('click', async () => {
-  setPastebinBusy(true)
+gistSave.addEventListener('click', async () => {
+  setGitHubBusy(true)
   try {
     await saveCurrentDocument()
   } catch (error) {
-    pastebinStatus.textContent = error.message
+    gistStatus.textContent = error.message
   } finally {
-    setPastebinBusy(false)
+    setGitHubBusy(false)
   }
 })
 
-pastebinNew.addEventListener('click', async () => {
-  setPastebinBusy(true)
+gistNew.addEventListener('click', async () => {
+  setGitHubBusy(true)
   try {
     await saveCurrentDocument()
-    const response = await extensionApi.runtime.sendMessage({type: 'start-new-pastebin-document'})
+    const response = await extensionApi.runtime.sendMessage({type: 'start-new-gist-document'})
     if (!response?.ok) throw new Error(response?.error || 'Unable to start a new document.')
     await extensionApi.tabs.create({url: 'https://textarea.my/#new'})
     window.close()
   } catch (error) {
-    pastebinStatus.textContent = error.message
-    setPastebinBusy(false)
+    gistStatus.textContent = error.message
+    setGitHubBusy(false)
   }
 })
 
-pastebinRefreshKey.addEventListener('click', async () => {
-  setPastebinBusy(true)
-  pastebinStatus.textContent = 'Refreshing Pastebin user key…'
-  try {
-    const response = await extensionApi.runtime.sendMessage({type: 'refresh-pastebin-key'})
-    if (!response?.ok) throw new Error(response?.error || 'Unable to refresh the user key.')
-    pastebinStatus.textContent = 'Pastebin user key refreshed.'
-  } catch (error) {
-    pastebinStatus.textContent = error.message
-  } finally {
-    setPastebinBusy(false)
-  }
-})
-
-pastebinOpen.addEventListener('click', () => {
-  if (pastebinUrl) extensionApi.tabs.create({url: pastebinUrl})
+gistOpen.addEventListener('click', () => {
+  if (gistUrl) extensionApi.tabs.create({url: gistUrl})
   window.close()
 })
 
-pastebinDisconnect.addEventListener('click', async () => {
-  setPastebinBusy(true)
-  const response = await extensionApi.runtime.sendMessage({type: 'disconnect-pastebin'})
-  setPastebinBusy(false)
+githubDisconnect.addEventListener('click', async () => {
+  setGitHubBusy(true)
+  const response = await extensionApi.runtime.sendMessage({type: 'disconnect-github'})
+  setGitHubBusy(false)
   if (!response?.ok) {
-    pastebinStatus.textContent = response?.error || 'Unable to disconnect Pastebin.'
+    gistStatus.textContent = response?.error || 'Unable to disconnect GitHub.'
     return
   }
-  showPastebinState({connected: false})
+  showGistState({connected: false})
 })
 
-pastebinApiHelp.addEventListener('click', () => {
-  extensionApi.tabs.create({url: 'https://pastebin.com/doc_api#1'})
+githubTokenHelp.addEventListener('click', () => {
+  extensionApi.tabs.create({
+    url: 'https://github.com/settings/tokens/new?scopes=gist&description=Textarea%20Sync',
+  })
   window.close()
 })
 
-loadPastebinState().catch(error => {
-  pastebinStatus.textContent = error.message
-  pastebinForm.hidden = false
+loadGistState().catch(error => {
+  gistStatus.textContent = error.message
+  githubForm.hidden = false
 })

@@ -13,7 +13,7 @@ EXTENSION_FILES := \
 	manifest.json \
 	background.js \
 	content.js \
-	pastebin.js \
+	gist.js \
 	document-storage.js \
 	popup.html \
 	popup.css \
@@ -48,12 +48,12 @@ test:
 	python3 -m json.tool manifest.json >/dev/null
 	node ../scripts/sync-extension-shared.mjs --check
 	node ../extension-shared/document-storage.test.mjs
-	node ../extension-shared/pastebin.test.mjs
+	node ../extension-shared/gist.test.mjs
 	node ../extension-shared/background.test.mjs
 	node ../extension-shared/popup-form.test.mjs
 	node --check background.js
 	node --check content.js
-	node --check pastebin.js
+	node --check gist.js
 	node --check popup-form.js
 	node --check popup.js
 	node --check document-storage.js

@@ -1,7 +1,7 @@
 # textarea.my sync
 
 Browser extensions for Chrome and Firefox that save and share named
-[`textarea.my`](https://textarea.my) documents through Pastebin.
+[`textarea.my`](https://textarea.my) documents through one secret GitHub Gist.
 
 Shared extension code is in `extension-shared/`.
 
@@ -12,5 +12,5 @@ make -C chrome-extension package
 make -C firefox-extension package
 ```
 
-Pastebin receives the document URL, which contains the document text. Do not
-use it for secrets.
+GitHub receives the document URL, which contains the document text. Secret
+Gists are unlisted, not encrypted. Do not use this for secrets.

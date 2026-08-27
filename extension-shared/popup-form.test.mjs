@@ -2,11 +2,7 @@ import assert from 'node:assert/strict'
 import './popup-form.js'
 
 const form = {
-  elements: [
-    {disabled: false},
-    {disabled: false},
-    {disabled: false},
-  ],
+  elements: [{disabled: false}],
 }
 
 class TestFormData {
@@ -16,15 +12,11 @@ class TestFormData {
   }
 
   get(name) {
-    return {
-      developerKey: 'developer-key',
-      username: 'pastebin-user',
-      password: 'pastebin-password',
-    }[name]
+    return {token: 'github-token'}[name]
   }
 }
 
-const credentials = globalThis.TextareaPopupForm.capturePastebinCredentials(
+const credentials = globalThis.TextareaPopupForm.captureGitHubCredentials(
   form,
   busy => {
     for (const element of form.elements) element.disabled = busy
@@ -33,9 +25,7 @@ const credentials = globalThis.TextareaPopupForm.capturePastebinCredentials(
 )
 
 assert.deepEqual(credentials, {
-  developerKey: 'developer-key',
-  username: 'pastebin-user',
-  password: 'pastebin-password',
+  token: 'github-token',
 })
 assert.equal(form.elements.every(element => element.disabled), true)
 

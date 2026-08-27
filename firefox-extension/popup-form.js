@@ -1,14 +1,10 @@
 globalThis.TextareaPopupForm = (() => {
-  function capturePastebinCredentials(form, setBusy, FormDataType = FormData) {
+  function captureGitHubCredentials(form, setBusy, FormDataType = FormData) {
     const values = new FormDataType(form)
-    const credentials = {
-      developerKey: values.get('developerKey'),
-      username: values.get('username'),
-      password: values.get('password'),
-    }
+    const credentials = {token: values.get('token')}
     setBusy(true)
     return credentials
   }
 
-  return {capturePastebinCredentials}
+  return {captureGitHubCredentials}
 })()

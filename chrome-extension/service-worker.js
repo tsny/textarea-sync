@@ -1,3 +1,3 @@
 import './document-storage.js'
-import './pastebin.js'
+import './gist.js'
 import './background.js'

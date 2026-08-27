@@ -9,13 +9,13 @@ const sharedFiles = [
   'background.js',
   'content.js',
   'document-storage.js',
-  'pastebin.js',
+  'gist.js',
   'popup.css',
   'popup-form.js',
   'popup.html',
   'popup.js',
 ]
-const obsoleteFiles = ['sync-storage.js']
+const obsoleteFiles = ['pastebin.js', 'sync-storage.js']
 const mode = process.argv[2] || '--check'
 
 if (!['--check', '--write'].includes(mode)) {

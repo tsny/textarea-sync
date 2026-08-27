@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import './document-storage.js'
-import './pastebin.js'
+import './gist.js'
 
 class MemoryStorage {
   values = {}
@@ -24,8 +24,6 @@ class MemoryStorage {
 let messageListener
 const createdTabs = []
 const localStorage = new MemoryStorage()
-// Exercise the Chrome fallback; Firefox takes the same path through
-// globalThis.browser.
 globalThis.chrome = {
   action: {
     setBadgeBackgroundColor() {},
@@ -36,40 +34,56 @@ globalThis.chrome = {
     onInstalled: {addListener() {}},
     onMessage: {addListener(listener) { messageListener = listener }},
   },
-  storage: {
-    local: localStorage,
-  },
+  storage: {local: localStorage},
   tabs: {
     async create(options) { createdTabs.push(options) },
     onUpdated: {addListener() {}},
   },
 }
-let loginCount = 0
-globalThis.fetch = async (_url, options) => {
-  const values = Object.fromEntries(new URLSearchParams(options.body))
-  if (values.api_user_name) {
-    assert.equal(values.api_user_name, 'pastebin-user')
-    assert.equal(values.api_user_password, 'pastebin-password')
-    loginCount++
-    return {
-      ok: true,
-      status: 200,
-      text: async () => loginCount === 1 ? 'generated-user-key' : `refreshed-user-key-${loginCount}`,
-    }
+
+let remoteDocuments = []
+function jsonResponse(value, status = 200) {
+  return {
+    ok: status >= 200 && status < 300,
+    status,
+    text: async () => JSON.stringify(value),
   }
-  if (values.api_user_key === 'generated-user-key') {
-    assert.equal(values.api_option, 'list')
-    return {ok: false, status: 422, text: async () => 'expired api_user_key'}
+}
+
+globalThis.fetch = async (url, options) => {
+  assert.equal(options.headers.Authorization, 'Bearer github-token')
+  if (url.endsWith('/user')) return jsonResponse({login: 'octocat'})
+  if (url.includes('/gists?')) return jsonResponse([])
+  if (url.endsWith('/gists') && options.method === 'POST') {
+    const body = JSON.parse(options.body)
+    remoteDocuments = JSON.parse(body.files['textarea-sync.json'].content).documents
+    return jsonResponse({
+      id: 'gist-1',
+      html_url: 'https://gist.github.com/octocat/gist-1',
+      files: {'textarea-sync.json': {}},
+    }, 201)
   }
-  assert.match(values.api_user_key, /^refreshed-user-key-/)
-  if (values.api_option === 'list') {
-    return {ok: true, status: 200, text: async () => 'No pastes found.'}
+  if (url.endsWith('/gists/gist-1') && options.method === 'GET') {
+    return jsonResponse({
+      id: 'gist-1',
+      html_url: 'https://gist.github.com/octocat/gist-1',
+      files: {
+        'textarea-sync.json': {
+          content: JSON.stringify({version: 2, documents: remoteDocuments}),
+        },
+      },
+    })
   }
-  if (values.api_option === 'paste') {
-    assert.equal(values.api_paste_name, 'textarea.my sync')
-    return {ok: true, status: 200, text: async () => 'https://pastebin.com/replacement'}
+  if (url.endsWith('/gists/gist-1') && options.method === 'PATCH') {
+    const body = JSON.parse(options.body)
+    remoteDocuments = JSON.parse(body.files['textarea-sync.json'].content).documents
+    return jsonResponse({
+      id: 'gist-1',
+      html_url: 'https://gist.github.com/octocat/gist-1',
+      files: {'textarea-sync.json': {}},
+    })
   }
-  assert.fail(`Unexpected Pastebin operation: ${values.api_option}`)
+  assert.fail(`Unexpected GitHub request: ${options.method} ${url}`)
 }
 
 await import('./background.js')
@@ -99,46 +113,50 @@ const saveResponse = await sendMessage(
 assert.deepEqual(saveResponse.response, {ok: true})
 assert.equal((await globalThis.TextareaDocumentStorage.getLatest(localStorage)).path, '/#shared')
 
-const disconnected = await sendMessage({type: 'get-pastebin-connection'})
+const disconnected = await sendMessage({type: 'get-github-connection'})
 assert.deepEqual(disconnected.response, {ok: true, connected: false})
 
 const setupResponse = await sendMessage(
-  {type: 'open-pastebin-setup'},
+  {type: 'open-sync-setup'},
   {url: 'https://textarea.my/#shared'}
 )
 assert.deepEqual(setupResponse.response, {ok: true})
 assert.deepEqual(createdTabs, [{url: 'moz-extension://test/popup.html'}])
 
-const connectResponse = await sendMessage({
-  type: 'connect-pastebin',
-  developerKey: 'developer-key',
-  username: 'pastebin-user',
-  password: 'pastebin-password',
-})
-assert.deepEqual(connectResponse.response, {ok: true, username: 'pastebin-user'})
-assert.deepEqual(localStorage.values.pastebinCredentials, {
-  developerKey: 'developer-key',
-  userKey: 'generated-user-key',
-  username: 'pastebin-user',
-  password: 'pastebin-password',
-})
-const connected = await sendMessage({type: 'get-pastebin-connection'})
-assert.deepEqual(connected.response, {ok: true, connected: true})
-
 await localStorage.set({
   pastebinDeviceId: '0464E599',
   pastebinDocumentName: 'Work notes',
+  pastebinDocuments: [{
+    name: 'Work notes',
+    url: 'https://textarea.my/#legacy',
+    title: 'Textarea',
+    updatedAt: 50,
+  }],
 })
-const refreshedState = await sendMessage({type: 'get-pastebin-state'})
-assert.equal(refreshedState.response.ok, true)
-assert.equal(refreshedState.response.error, undefined)
-assert.equal(refreshedState.response.documentName, 'Work notes')
-assert.equal(loginCount, 2)
-assert.equal(localStorage.values.pastebinCredentials.userKey, 'refreshed-user-key-2')
-assert.equal(localStorage.values.pastebinCredentials.password, 'pastebin-password')
+const connectResponse = await sendMessage({type: 'connect-github', token: ' github-token '})
+assert.deepEqual(connectResponse.response, {
+  ok: true,
+  username: 'octocat',
+  gistUrl: 'https://gist.github.com/octocat/gist-1',
+})
+assert.deepEqual(localStorage.values.githubCredentials, {
+  token: 'github-token',
+  username: 'octocat',
+  gistId: 'gist-1',
+})
+assert.equal(localStorage.values.syncDeviceId, '0464E599')
+assert.equal(localStorage.values.pastebinCredentials, undefined)
+assert.equal(localStorage.values.pastebinDocuments, undefined)
+
+const connected = await sendMessage({type: 'get-github-connection'})
+assert.deepEqual(connected.response, {ok: true, connected: true})
+const gistState = await sendMessage({type: 'get-gist-state'})
+assert.equal(gistState.response.ok, true)
+assert.equal(gistState.response.documentName, 'Work notes')
+assert.equal(gistState.response.documents[0].name, 'Work notes')
 
 await localStorage.set({
-  pastebinDocuments: [
+  gistDocuments: [
     {
       name: 'Shared note',
       url: 'https://textarea.my/#shared',
@@ -154,51 +172,56 @@ await localStorage.set({
   ],
 })
 const documentTitle = await sendMessage(
-  {type: 'get-pastebin-document-title', url: 'https://textarea.my/#shared'},
+  {type: 'get-gist-document-title', url: 'https://textarea.my/#shared'},
   {url: 'https://textarea.my/#shared'}
 )
 assert.deepEqual(documentTitle.response, {ok: true, name: 'Work notes'})
-const unknownDocumentTitle = await sendMessage(
-  {type: 'get-pastebin-document-title', url: 'https://textarea.my/#unknown'},
-  {url: 'https://textarea.my/#unknown'}
-)
-assert.deepEqual(unknownDocumentTitle.response, {ok: true, name: null})
 
-const manualRefresh = await sendMessage({type: 'refresh-pastebin-key'})
-assert.deepEqual(manualRefresh.response, {ok: true})
-assert.equal(loginCount, 3)
-assert.equal(localStorage.values.pastebinCredentials.userKey, 'refreshed-user-key-3')
+await localStorage.set({
+  gistDocuments: Array.from({length: 6}, (_, index) => ({
+    name: `Recent ${index + 1}`,
+    url: `https://textarea.my/#recent-${index + 1}`,
+    title: 'Textarea',
+    updatedAt: index + 1,
+  })),
+})
+const recentDocuments = await sendMessage(
+  {type: 'get-recent-gist-documents'},
+  {url: 'https://textarea.my/#new'}
+)
+assert.deepEqual(
+  recentDocuments.response.documents.map(document => document.name),
+  ['Recent 6', 'Recent 5', 'Recent 4', 'Recent 3', 'Recent 2']
+)
 
 const selectDocument = await sendMessage({
-  type: 'select-pastebin-document',
+  type: 'select-gist-document',
   documentName: ' Personal notes ',
 })
 assert.deepEqual(selectDocument.response, {ok: true, documentName: 'Personal notes'})
-assert.equal(localStorage.values.pastebinDocumentName, 'Personal notes')
+assert.equal(localStorage.values.gistDocumentName, 'Personal notes')
 
-const startNewDocument = await sendMessage({type: 'start-new-pastebin-document'})
+const startNewDocument = await sendMessage({type: 'start-new-gist-document'})
 assert.deepEqual(startNewDocument.response, {ok: true})
-assert.equal(localStorage.values.pastebinDocumentName, '')
-const newDocumentState = await sendMessage({type: 'get-pastebin-state'})
+assert.equal(localStorage.values.gistDocumentName, '')
+const newDocumentState = await sendMessage({type: 'get-gist-state'})
 assert.equal(newDocumentState.response.documentName, '')
 
-const autoNamedSave = await sendMessage({type: 'sync-pastebin', documentName: ''})
+const autoNamedSave = await sendMessage({type: 'sync-gist', documentName: ''})
 assert.equal(autoNamedSave.response.ok, true)
 assert.match(autoNamedSave.response.documentName, /^Document \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/)
-assert.equal(localStorage.values.pastebinDocumentName, autoNamedSave.response.documentName)
-assert.equal(localStorage.values.pastebinDocuments[0].name, autoNamedSave.response.documentName)
+assert.equal(localStorage.values.gistDocumentName, autoNamedSave.response.documentName)
+assert.equal(localStorage.values.gistDocuments[0].name, autoNamedSave.response.documentName)
 assert.deepEqual(
   {
-    name: localStorage.values.pastebinLastSavedDocument.name,
-    url: localStorage.values.pastebinLastSavedDocument.url,
+    name: localStorage.values.gistLastSavedDocument.name,
+    url: localStorage.values.gistLastSavedDocument.url,
   },
   {
     name: autoNamedSave.response.documentName,
     url: 'https://textarea.my/#shared',
   }
 )
-assert.equal(Number.isFinite(localStorage.values.pastebinLastSavedDocument.savedAt), true)
 
 assert.equal(messageListener({type: 'unknown'}, {}, () => {}), false)
-
 console.log('Shared background adapter tests passed')
