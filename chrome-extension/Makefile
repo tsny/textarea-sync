@@ -2,6 +2,7 @@ NAME := textarea-sync-chrome
 VERSION := $(shell awk -F'"' '/"version"/ { print $$4; exit }' manifest.json)
 DIST_DIR := dist
 PACKAGE := $(DIST_DIR)/$(NAME)-$(VERSION).zip
+STAGE_DIR := $(DIST_DIR)/stage
 
 EXTENSION_FILES := \
 	manifest.json \
@@ -20,8 +21,13 @@ EXTENSION_FILES := \
 all: package
 
 package: test | $(DIST_DIR)
+	rm -rf $(STAGE_DIR)
+	mkdir -p $(STAGE_DIR)
+	cp $(EXTENSION_FILES) $(STAGE_DIR)/
+	python3 -c "import json,collections; p='$(STAGE_DIR)/manifest.json'; m=json.load(open(p), object_pairs_hook=collections.OrderedDict); m.pop('key', None); json.dump(m, open(p,'w'), indent=2)"
 	rm -f $(PACKAGE)
-	zip -X -9 $(PACKAGE) $(EXTENSION_FILES)
+	cd $(STAGE_DIR) && zip -X -9 ../$(NAME)-$(VERSION).zip $(EXTENSION_FILES)
+	rm -rf $(STAGE_DIR)
 	@echo "Built $(PACKAGE)"
 
 test:
