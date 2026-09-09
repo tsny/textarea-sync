@@ -11,7 +11,9 @@
   let autoSaveInFlight = false
   let toastHost
   let toastTimer
+  let lastGistSaveAt = 0
   const AUTO_SAVE_DELAY = 3000
+  const MIN_AUTO_SAVE_INTERVAL = 30000
 
   function applySyncedDocumentTitle() {
     const title = documentIsDirty ? `* ${syncedDocumentName}` : syncedDocumentName
@@ -88,6 +90,7 @@
       if (actionsDocumentNameInput && !actionsDocumentNameInput.matches(':focus')) {
         actionsDocumentNameInput.value = syncedDocumentName
       }
+      lastGistSaveAt = Date.now()
       setDocumentDirty(false)
       showToast(`Saved ${syncedDocumentName}`)
     } catch (error) {
@@ -97,8 +100,10 @@
     }
   }
 
-  function scheduleAutoSave(delay = AUTO_SAVE_DELAY) {
+  function scheduleAutoSave() {
     if (!syncedDocumentName) return
+    const sinceLastSave = Date.now() - lastGistSaveAt
+    const delay = Math.max(AUTO_SAVE_DELAY, MIN_AUTO_SAVE_INTERVAL - sinceLastSave)
     clearTimeout(autoSaveTimer)
     autoSaveTimer = setTimeout(() => {
       autoSaveDocument().catch(() => {
@@ -160,6 +165,7 @@
       if (!response?.ok) throw new Error(response?.error || 'Unable to save the document.')
       syncedDocumentName = response.documentName
       if (actionsDocumentNameInput) actionsDocumentNameInput.value = syncedDocumentName
+      lastGistSaveAt = Date.now()
       setDocumentDirty(false)
       status.textContent = 'Saved.'
     } finally {
