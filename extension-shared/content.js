@@ -14,6 +14,7 @@
   let lastGistSaveAt = 0
   const AUTO_SAVE_DELAY = 3000
   const MIN_AUTO_SAVE_INTERVAL = 30000
+  const REMOTE_POLL_INTERVAL = 30000
 
   function applySyncedDocumentTitle() {
     const title = documentIsDirty ? `* ${syncedDocumentName}` : syncedDocumentName
@@ -98,6 +99,30 @@
     } finally {
       autoSaveInFlight = false
     }
+  }
+
+  async function pollRemoteDocument() {
+    if (!syncedDocumentName || documentIsDirty || autoSaveInFlight || document.hidden) return
+
+    const response = await extensionApi.runtime.sendMessage({
+      type: 'refresh-gist-document',
+      documentName: syncedDocumentName,
+    })
+    if (!response?.ok || !response.document) return
+    // The document may have been edited or saved while the Gist was being read.
+    if (documentIsDirty || autoSaveInFlight) return
+    const remoteDocument = response.document
+    if (remoteDocument.updatedByDeviceId === response.deviceId) return
+    if (remoteDocument.url === location.href) return
+
+    showToast(`Loaded newer ${remoteDocument.name} from another device`)
+    location.replace(remoteDocument.url)
+  }
+
+  function pollRemoteDocumentQuietly() {
+    pollRemoteDocument().catch(() => {
+      // The Gist may be unreachable, or the extension reloaded; retry on the next poll.
+    })
   }
 
   function scheduleAutoSave() {
@@ -574,6 +599,10 @@
     }
     checkGitHubConnection()
     scheduleSave(0)
+    setInterval(pollRemoteDocumentQuietly, REMOTE_POLL_INTERVAL)
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) pollRemoteDocumentQuietly()
+    })
   })
 
   extensionApi.storage.onChanged.addListener((changes, areaName) => {
