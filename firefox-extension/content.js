@@ -5,9 +5,16 @@
   let githubPrompt
   let syncedDocumentName = ''
   let actionsDocumentNameInput
-  let actionsRecentDocumentsSection
   let documentArticle
   let documentIsDirty = false
+  let autoSaveTimer
+  let autoSaveInFlight = false
+  let toastHost
+  let toastTimer
+  let lastGistSaveAt = 0
+  const AUTO_SAVE_DELAY = 3000
+  const MIN_AUTO_SAVE_INTERVAL = 30000
+  const REMOTE_POLL_INTERVAL = 30000
 
   function applySyncedDocumentTitle() {
     const title = documentIsDirty ? `* ${syncedDocumentName}` : syncedDocumentName
@@ -19,6 +26,115 @@
   function setDocumentDirty(dirty) {
     documentIsDirty = Boolean(dirty && syncedDocumentName)
     applySyncedDocumentTitle()
+  }
+
+  function showToast(message) {
+    if (!toastHost) {
+      toastHost = document.createElement('div')
+      const shadow = toastHost.attachShadow({mode: 'closed'})
+      const style = document.createElement('style')
+      style.textContent = `
+        :host {
+          all: initial;
+          bottom: max(12px, env(safe-area-inset-bottom));
+          left: max(12px, env(safe-area-inset-left));
+          position: fixed;
+          z-index: 2147483647;
+        }
+        p {
+          background: rgba(38, 38, 38, .94);
+          border-radius: 8px;
+          box-shadow: 0 4px 16px rgba(0, 0, 0, .22);
+          color: #fff;
+          font: 600 12px/1.3 system-ui, sans-serif;
+          margin: 0;
+          opacity: 1;
+          padding: 8px 12px;
+          transition: opacity .3s ease;
+        }
+        p[data-hidden="true"] { opacity: 0; }
+      `
+      const text = document.createElement('p')
+      text.setAttribute('role', 'status')
+      text.setAttribute('aria-live', 'polite')
+      shadow.append(style, text)
+      toastHost.__text = text
+      document.documentElement.append(toastHost)
+    }
+    const text = toastHost.__text
+    text.textContent = message
+    text.dataset.hidden = 'false'
+    clearTimeout(toastTimer)
+    toastTimer = setTimeout(() => { text.dataset.hidden = 'true' }, 2500)
+  }
+
+  async function autoSaveDocument() {
+    if (autoSaveInFlight || !documentIsDirty || !syncedDocumentName) return
+    if (!location.hash || location.hash === '#new') return
+
+    autoSaveInFlight = true
+    try {
+      const localResponse = await extensionApi.runtime.sendMessage({
+        type: 'save-current',
+        url: location.href,
+        title: syncedDocumentName,
+      })
+      if (!localResponse?.ok) {
+        throw new Error(localResponse?.error || 'Unable to capture the current document.')
+      }
+      const response = await extensionApi.runtime.sendMessage({
+        type: 'sync-gist',
+        documentName: syncedDocumentName,
+      })
+      if (!response?.ok) throw new Error(response?.error || 'Unable to save the document.')
+      syncedDocumentName = response.documentName
+      if (actionsDocumentNameInput && !actionsDocumentNameInput.matches(':focus')) {
+        actionsDocumentNameInput.value = syncedDocumentName
+      }
+      lastGistSaveAt = Date.now()
+      setDocumentDirty(false)
+      showToast(`Saved ${syncedDocumentName}`)
+    } catch (error) {
+      showToast(error.message)
+    } finally {
+      autoSaveInFlight = false
+    }
+  }
+
+  async function pollRemoteDocument() {
+    if (!syncedDocumentName || documentIsDirty || autoSaveInFlight || document.hidden) return
+
+    const response = await extensionApi.runtime.sendMessage({
+      type: 'refresh-gist-document',
+      documentName: syncedDocumentName,
+    })
+    if (!response?.ok || !response.document) return
+    // The document may have been edited or saved while the Gist was being read.
+    if (documentIsDirty || autoSaveInFlight) return
+    const remoteDocument = response.document
+    if (remoteDocument.updatedByDeviceId === response.deviceId) return
+    if (remoteDocument.url === location.href) return
+
+    showToast(`Loaded newer ${remoteDocument.name} from another device`)
+    location.replace(remoteDocument.url)
+  }
+
+  function pollRemoteDocumentQuietly() {
+    pollRemoteDocument().catch(() => {
+      // The Gist may be unreachable, or the extension reloaded; retry on the next poll.
+    })
+  }
+
+  function scheduleAutoSave() {
+    if (!syncedDocumentName) return
+    const sinceLastSave = Date.now() - lastGistSaveAt
+    const delay = Math.max(AUTO_SAVE_DELAY, MIN_AUTO_SAVE_INTERVAL - sinceLastSave)
+    clearTimeout(autoSaveTimer)
+    autoSaveTimer = setTimeout(() => {
+      autoSaveDocument().catch(() => {
+        // Autosave failures are surfaced through the toast.
+      })
+    }, delay)
   }
 
   function loadSyncedDocumentTitle() {
@@ -34,7 +150,6 @@
         if (actionsDocumentNameInput && !actionsDocumentNameInput.matches(':focus')) {
           actionsDocumentNameInput.value = syncedDocumentName
         }
-        if (actionsRecentDocumentsSection) actionsRecentDocumentsSection.hidden = true
         applySyncedDocumentTitle()
       }
     }).catch(() => {
@@ -75,7 +190,7 @@
       if (!response?.ok) throw new Error(response?.error || 'Unable to save the document.')
       syncedDocumentName = response.documentName
       if (actionsDocumentNameInput) actionsDocumentNameInput.value = syncedDocumentName
-      if (actionsRecentDocumentsSection) actionsRecentDocumentsSection.hidden = true
+      lastGistSaveAt = Date.now()
       setDocumentDirty(false)
       status.textContent = 'Saved.'
     } finally {
@@ -241,30 +356,28 @@
     recentHeading.textContent = 'Recent documents'
     const recentDocuments = document.createElement('div')
     recentDocumentsSection.append(recentHeading, recentDocuments)
-    actionsRecentDocumentsSection = recentDocumentsSection
     menu.append(nameLabel, saveButton, settingsButton, status, recentDocumentsSection)
 
     async function loadRecentDocuments() {
-      if (syncedDocumentName) {
-        recentDocumentsSection.hidden = true
-        return
-      }
       const response = await extensionApi.runtime.sendMessage({
         type: 'get-recent-gist-documents',
       })
-      if (!response?.ok || syncedDocumentName) {
+      if (!response?.ok) {
         recentDocumentsSection.hidden = true
         return
       }
+      const documents = response.documents.filter(candidate => (
+        candidate.name.toLocaleLowerCase() !== syncedDocumentName.toLocaleLowerCase()
+      ))
       recentDocuments.replaceChildren()
-      for (const recentDocument of response.documents) {
+      for (const recentDocument of documents) {
         const button = document.createElement('button')
         button.type = 'button'
         button.textContent = recentDocument.name
         button.title = `Switch to ${recentDocument.name}`
         button.addEventListener('click', async () => {
-          if (location.hash && location.hash !== '#new' &&
-              !confirm('This unsaved document will be replaced. Switch documents?')) {
+          if (documentIsDirty &&
+              !confirm('This document has unsaved changes. Switch documents?')) {
             return
           }
           button.disabled = true
@@ -282,7 +395,7 @@
         })
         recentDocuments.append(button)
       }
-      recentDocumentsSection.hidden = response.documents.length === 0
+      recentDocumentsSection.hidden = documents.length === 0
     }
 
     function setMenuOpen(open) {
@@ -454,6 +567,7 @@
   addEventListener('input', event => {
     scheduleSave()
     if (documentArticle?.contains(event.target)) setDocumentDirty(true)
+    scheduleAutoSave()
   }, true)
 
   addEventListener('beforeunload', event => {
@@ -472,7 +586,10 @@
     })
     documentArticle = document.querySelector('article')
     if (documentArticle) {
-      new MutationObserver(() => scheduleSave()).observe(documentArticle, {
+      new MutationObserver(() => {
+        scheduleSave()
+        scheduleAutoSave()
+      }).observe(documentArticle, {
         attributes: true,
         attributeFilter: ['style'],
         childList: true,
@@ -482,6 +599,10 @@
     }
     checkGitHubConnection()
     scheduleSave(0)
+    setInterval(pollRemoteDocumentQuietly, REMOTE_POLL_INTERVAL)
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) pollRemoteDocumentQuietly()
+    })
   })
 
   extensionApi.storage.onChanged.addListener((changes, areaName) => {

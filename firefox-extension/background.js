@@ -173,6 +173,34 @@ async function getGistDocumentTitle(value) {
   return match ? normalizeDocumentName(match.name) : null
 }
 
+async function refreshGistDocument(requestedDocumentName) {
+  const credentials = await getGitHubCredentials()
+  if (!credentials) return {connected: false, document: null}
+
+  const remote = await loadGist(credentials)
+  await extensionApi.storage.local.set({
+    [GIST_DOCUMENTS_KEY]: remote.documents,
+    [GIST_URL_KEY]: remote.gistUrl,
+  })
+  const name = normalizeDocumentName(requestedDocumentName)
+  const match = name && remote.documents.find(candidate => (
+    normalizeDocumentName(candidate?.name).toLocaleLowerCase() === name.toLocaleLowerCase()
+  ))
+  if (!match) return {connected: true, document: null}
+  const document = documentFromUrl(match.url, match.title)
+  if (!document) return {connected: true, document: null}
+  return {
+    connected: true,
+    deviceId: await getDeviceId(),
+    document: {
+      name: normalizeDocumentName(match.name),
+      url: `${TEXTAREA_ORIGIN}${document.path}`,
+      updatedAt: Number(match.updatedAt),
+      updatedByDeviceId: match.updatedByDeviceId || '',
+    },
+  }
+}
+
 async function getRecentGistDocuments() {
   const state = await extensionApi.storage.local.get(GIST_DOCUMENTS_KEY)
   const documents = Array.isArray(state[GIST_DOCUMENTS_KEY]) ? state[GIST_DOCUMENTS_KEY] : []
@@ -263,6 +291,14 @@ function handleMessage(message, sender) {
     if (typeof senderUrl !== 'string') return {ok: false, ...senderUrl}
     return getRecentGistDocuments()
       .then(documents => ({ok: true, documents}))
+      .catch(error => ({ok: false, error: error.message}))
+  }
+
+  if (message?.type === 'refresh-gist-document') {
+    const senderUrl = requireTextareaSender(sender, 'Document updates are available only on textarea.my.')
+    if (typeof senderUrl !== 'string') return {ok: false, ...senderUrl}
+    return refreshGistDocument(message.documentName)
+      .then(result => ({ok: true, ...result}))
       .catch(error => ({ok: false, error: error.message}))
   }
 

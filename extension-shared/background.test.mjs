@@ -223,5 +223,36 @@ assert.deepEqual(
   }
 )
 
+const refreshed = await sendMessage(
+  {type: 'refresh-gist-document', documentName: autoNamedSave.response.documentName},
+  {url: 'https://textarea.my/#shared'}
+)
+assert.equal(refreshed.response.ok, true)
+assert.equal(refreshed.response.deviceId, '0464E599')
+assert.deepEqual(
+  {
+    name: refreshed.response.document.name,
+    url: refreshed.response.document.url,
+    updatedByDeviceId: refreshed.response.document.updatedByDeviceId,
+  },
+  {
+    name: autoNamedSave.response.documentName,
+    url: 'https://textarea.my/#shared',
+    updatedByDeviceId: '0464E599',
+  }
+)
+
+const refreshedMissing = await sendMessage(
+  {type: 'refresh-gist-document', documentName: 'Not a document'},
+  {url: 'https://textarea.my/#shared'}
+)
+assert.deepEqual(refreshedMissing.response, {ok: true, connected: true, document: null})
+
+const refreshedElsewhere = await sendMessage({type: 'refresh-gist-document', documentName: 'Any'})
+assert.deepEqual(refreshedElsewhere.response, {
+  ok: false,
+  error: 'Document updates are available only on textarea.my.',
+})
+
 assert.equal(messageListener({type: 'unknown'}, {}, () => {}), false)
 console.log('Shared background adapter tests passed')
