@@ -73,35 +73,17 @@ button.text-button {
   width: auto;
 }
 
-section {
+section + section {
   border-top: 1px solid color-mix(in srgb, currentColor 18%, transparent);
   margin-top: 16px;
   padding-top: 14px;
 }
 
-form label,
-.setting-label {
+form label {
   display: block;
   font-size: 12px;
   font-weight: 600;
   margin-bottom: 10px;
-}
-
-.document-name-controls {
-  display: flex;
-  gap: 8px;
-}
-
-.document-name-controls input {
-  flex: 1 1 auto;
-  margin-top: 0;
-  min-width: 0;
-}
-
-.document-name-controls button {
-  flex: 0 0 auto;
-  min-height: 36px;
-  width: auto;
 }
 
 input {
@@ -125,16 +107,27 @@ input:focus-visible {
 
 #github-account {
   font-weight: 600;
+  margin-bottom: 4px;
 }
 
-.compact-hint {
-  margin-top: 6px;
+.footer-actions {
+  display: flex;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+#gist-documents-empty {
+  margin: 10px 0;
 }
 
 #gist-documents {
   list-style: none;
-  margin: 0;
+  margin: 0 0 10px;
   padding: 0;
+}
+
+#gist-documents:empty {
+  margin: 0;
 }
 
 #gist-documents li + li {

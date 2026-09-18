@@ -6,10 +6,6 @@
 <link rel="stylesheet" href="popup.css">
 <main>
   <h1>Textarea Sync</h1>
-  <p id="status" aria-live="polite">Looking for your latest local document…</p>
-  <p id="details" hidden></p>
-  <button id="open" type="button" disabled>Open latest textarea</button>
-  <p class="hint">Saved on this device until you save to GitHub.</p>
 
   <section aria-labelledby="gist-heading">
     <h2 id="gist-heading">GitHub Gist sync</h2>
@@ -27,20 +23,24 @@
 
     <div id="github-connected" hidden>
       <p id="github-account"></p>
-      <p class="hint">One secret Gist stores <code>textarea-sync.json</code>.</p>
-      <label id="gist-document-name-label" class="setting-label" for="gist-document-name">Current document name</label>
-      <div class="document-name-controls">
-        <input id="gist-document-name" type="text" maxlength="100" aria-labelledby="gist-document-name-label">
-        <button id="gist-save" type="button">Save</button>
-      </div>
-      <button id="gist-new" class="secondary" type="button">New document</button>
-      <p class="hint compact-hint">Leave the name blank to generate one. New document saves first, then opens a blank textarea.</p>
-      <button id="gist-open" class="secondary" type="button" hidden>Open sync Gist</button>
       <h3 id="gist-documents-heading" hidden>Documents</h3>
       <ul id="gist-documents" aria-labelledby="gist-documents-heading"></ul>
-      <button id="github-disconnect" class="text-button" type="button">Disconnect GitHub</button>
-      <p class="hint">Textarea contents are embedded in their URLs and stored in a secret Gist.</p>
+      <p id="gist-documents-empty" class="hint" hidden>No documents yet. Save one from the Actions menu on textarea.my.</p>
+      <button id="gist-new" class="secondary" type="button">New blank document</button>
+      <div class="footer-actions">
+        <button id="gist-open" class="text-button" type="button" hidden>Open sync Gist</button>
+        <button id="github-disconnect" class="text-button" type="button">Disconnect GitHub</button>
+      </div>
+      <p class="hint">One secret Gist stores <code>textarea-sync.json</code>. Textarea contents are embedded in their URLs.</p>
     </div>
+  </section>
+
+  <section aria-labelledby="local-heading">
+    <h2 id="local-heading">This device</h2>
+    <p id="status" aria-live="polite">Looking for your latest local document…</p>
+    <p id="details" hidden></p>
+    <button id="open" class="secondary" type="button" disabled>Open latest textarea</button>
+    <p class="hint">Saved on this device until you save to GitHub.</p>
   </section>
 </main>
 <script src="popup-form.js"></script>

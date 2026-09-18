@@ -7,13 +7,12 @@ const gistStatus = document.querySelector('#gist-status')
 const githubForm = document.querySelector('#github-form')
 const githubConnected = document.querySelector('#github-connected')
 const githubAccount = document.querySelector('#github-account')
-const gistDocumentName = document.querySelector('#gist-document-name')
-const gistSave = document.querySelector('#gist-save')
 const gistNew = document.querySelector('#gist-new')
 const gistOpen = document.querySelector('#gist-open')
 const githubDisconnect = document.querySelector('#github-disconnect')
 const gistDocuments = document.querySelector('#gist-documents')
 const gistDocumentsHeading = document.querySelector('#gist-documents-heading')
+const gistDocumentsEmpty = document.querySelector('#gist-documents-empty')
 const githubTokenHelp = document.querySelector('#github-token-help')
 let latest = null
 let gistUrl = null
@@ -41,9 +40,7 @@ openButton.addEventListener('click', () => {
 
 function setGitHubBusy(busy) {
   for (const element of githubForm.elements) element.disabled = busy
-  gistSave.disabled = busy
   gistNew.disabled = busy
-  gistDocumentName.disabled = busy
   githubDisconnect.disabled = busy
 }
 
@@ -60,6 +57,7 @@ function formatUpdatedAgo(updatedAt) {
 function renderDocuments(documents = []) {
   gistDocuments.replaceChildren()
   gistDocumentsHeading.hidden = documents.length === 0
+  gistDocumentsEmpty.hidden = documents.length > 0
   for (const syncedDocument of documents) {
     const item = document.createElement('li')
     const button = document.createElement('button')
@@ -98,8 +96,7 @@ function showGistState(state) {
     return
   }
   githubAccount.textContent = `Connected as ${state.username}`
-  gistDocumentName.value = state.documentName
-  gistStatus.textContent = state.error || 'Ready. Changes are shared when you choose Save.'
+  gistStatus.textContent = state.error || 'Documents are saved from the Actions menu on textarea.my.'
   gistUrl = state.gistUrl
   gistOpen.hidden = !gistUrl
   renderDocuments(state.documents)
@@ -138,44 +135,9 @@ githubForm.addEventListener('submit', async event => {
   }
 })
 
-async function saveCurrentDocument() {
-  gistStatus.textContent = 'Saving document…'
-  const response = await extensionApi.runtime.sendMessage({
-    type: 'sync-gist',
-    documentName: gistDocumentName.value,
-  })
-  if (!response?.ok) throw new Error(response?.error || 'Unable to save the document.')
-  gistDocumentName.value = response.documentName
-  gistStatus.textContent = 'Document saved.'
-  gistUrl = response.gistUrl
-  gistOpen.hidden = !gistUrl
-  renderDocuments(response.documents)
-  return response
-}
-
-gistSave.addEventListener('click', async () => {
-  setGitHubBusy(true)
-  try {
-    await saveCurrentDocument()
-  } catch (error) {
-    gistStatus.textContent = error.message
-  } finally {
-    setGitHubBusy(false)
-  }
-})
-
-gistNew.addEventListener('click', async () => {
-  setGitHubBusy(true)
-  try {
-    await saveCurrentDocument()
-    const response = await extensionApi.runtime.sendMessage({type: 'start-new-gist-document'})
-    if (!response?.ok) throw new Error(response?.error || 'Unable to start a new document.')
-    await extensionApi.tabs.create({url: 'https://textarea.my/#new'})
-    window.close()
-  } catch (error) {
-    gistStatus.textContent = error.message
-    setGitHubBusy(false)
-  }
+gistNew.addEventListener('click', () => {
+  extensionApi.tabs.create({url: 'https://textarea.my/#new'})
+  window.close()
 })
 
 gistOpen.addEventListener('click', () => {

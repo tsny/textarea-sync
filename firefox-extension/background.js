@@ -333,12 +333,6 @@ function handleMessage(message, sender) {
       .catch(error => ({ok: false, error: error.message}))
   }
 
-  if (message?.type === 'start-new-gist-document') {
-    return extensionApi.storage.local.set({[GIST_DOCUMENT_NAME_KEY]: ''})
-      .then(() => ({ok: true}))
-      .catch(error => ({ok: false, error: error.message}))
-  }
-
   if (message?.type === 'get-github-connection') {
     return getGitHubCredentials()
       .then(credentials => ({ok: true, connected: Boolean(credentials)}))

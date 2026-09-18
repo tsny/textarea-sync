@@ -213,9 +213,7 @@ const selectDocument = await sendMessage({
 assert.deepEqual(selectDocument.response, {ok: true, documentName: 'Personal notes'})
 assert.equal(localStorage.values.gistDocumentName, 'Personal notes')
 
-const startNewDocument = await sendMessage({type: 'start-new-gist-document'})
-assert.deepEqual(startNewDocument.response, {ok: true})
-assert.equal(localStorage.values.gistDocumentName, '')
+await localStorage.set({gistDocumentName: ''})
 const newDocumentState = await sendMessage({type: 'get-gist-state'})
 assert.equal(newDocumentState.response.documentName, '')
 
