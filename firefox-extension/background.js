@@ -4,6 +4,7 @@ const {
   connect: connectGist,
   load: loadGist,
   normalizeDocumentName,
+  remove: removeGistDocument,
   replace: replaceGist,
 } = globalThis.TextareaGist
 const TEXTAREA_ORIGIN = 'https://textarea.my'
@@ -166,6 +167,35 @@ async function syncLatestToGist(requestedDocumentName) {
   return {...result, documentName: name}
 }
 
+async function deleteGistDocument(requestedDocumentName) {
+  const credentials = await getGitHubCredentials()
+  if (!credentials) throw new Error('Connect a GitHub account first.')
+  const name = normalizeDocumentName(requestedDocumentName)
+  if (!name) throw new Error('Document name is invalid.')
+
+  const result = await removeGistDocument(credentials, name)
+  const values = {
+    [GIST_DOCUMENTS_KEY]: result.documents,
+    [GIST_URL_KEY]: result.gistUrl,
+  }
+  const state = await extensionApi.storage.local.get([
+    GIST_DOCUMENT_NAME_KEY,
+    GIST_LAST_SAVED_DOCUMENT_KEY,
+  ])
+  const matchesDeleted = candidate => (
+    normalizeDocumentName(candidate).toLocaleLowerCase() === name.toLocaleLowerCase()
+  )
+
+  // Deleting the selected document leaves the next save without a target name.
+
+  if (matchesDeleted(state[GIST_DOCUMENT_NAME_KEY])) values[GIST_DOCUMENT_NAME_KEY] = ''
+  await extensionApi.storage.local.set(values)
+  if (matchesDeleted(state[GIST_LAST_SAVED_DOCUMENT_KEY]?.name)) {
+    await extensionApi.storage.local.remove([GIST_LAST_SAVED_DOCUMENT_KEY])
+  }
+  return {documentName: name, documents: result.documents, gistUrl: result.gistUrl}
+}
+
 async function getGistDocumentTitle(value) {
   const document = documentFromUrl(value)
   if (!document) return null
@@ -322,6 +352,12 @@ function handleMessage(message, sender) {
   if (message?.type === 'get-gist-state') {
     return getGistState({cached: message.cached === true})
       .then(state => ({ok: true, ...state}))
+      .catch(error => ({ok: false, error: error.message}))
+  }
+
+  if (message?.type === 'delete-gist-document') {
+    return deleteGistDocument(message.documentName)
+      .then(result => ({ok: true, ...result}))
       .catch(error => ({ok: false, error: error.message}))
   }
 

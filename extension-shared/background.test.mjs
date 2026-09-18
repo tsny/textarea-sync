@@ -264,5 +264,16 @@ assert.deepEqual(refreshedElsewhere.response, {
   error: 'Document updates are available only on textarea.my.',
 })
 
+const deletedName = autoNamedSave.response.documentName
+const deleted = await sendMessage({type: 'delete-gist-document', documentName: deletedName})
+assert.equal(deleted.response.ok, true)
+assert.equal(deleted.response.documents.some(value => value.name === deletedName), false)
+assert.equal(remoteDocuments.some(value => value.name === deletedName), false)
+assert.equal(localStorage.values.gistDocumentName, '')
+assert.equal(localStorage.values.gistLastSavedDocument, undefined)
+
+const deletedMissing = await sendMessage({type: 'delete-gist-document', documentName: ''})
+assert.deepEqual(deletedMissing.response, {ok: false, error: 'Document name is invalid.'})
+
 assert.equal(messageListener({type: 'unknown'}, {}, () => {}), false)
 console.log('Shared background adapter tests passed')

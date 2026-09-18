@@ -130,6 +130,11 @@ input:focus-visible {
   margin: 0;
 }
 
+#gist-documents li {
+  display: flex;
+  gap: 6px;
+}
+
 #gist-documents li + li {
   margin-top: 6px;
 }
@@ -143,6 +148,28 @@ input:focus-visible {
   gap: 8px;
   min-height: 38px;
   text-align: left;
+}
+
+.document-list-select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.document-list-delete {
+  flex: 0 0 auto;
+  justify-content: center;
+  padding: 0;
+  width: 38px;
+}
+
+.document-list-delete:hover:not(:disabled) {
+  border-color: color-mix(in srgb, #d23b3b 55%, transparent);
+  color: #d23b3b;
+}
+
+.document-list-delete svg {
+  height: 16px;
+  width: 16px;
 }
 
 .document-list-name {

@@ -202,12 +202,27 @@ globalThis.TextareaGist = (() => {
     return {documents, gistUrl: gist.url}
   }
 
+  async function remove(credentials, documentName, fetchImpl = fetch) {
+    const name = normalizeDocumentName(documentName)
+    if (!name) throw new Error('Document name is invalid.')
+    const current = await load(credentials, fetchImpl)
+    const documents = current.documents.filter(candidate => (
+      candidate.name.toLocaleLowerCase() !== name.toLocaleLowerCase()
+    ))
+    if (documents.length === current.documents.length) {
+      return {documents: current.documents, gistUrl: current.gistUrl, removed: false}
+    }
+    const gist = await updateGist(credentials.token, credentials.gistId, documents, fetchImpl)
+    return {documents, gistUrl: gist.url, removed: true}
+  }
+
   return {
     connect,
     load,
     mergeDocuments,
     normalizeDocumentName,
     parseSyncFile,
+    remove,
     replace,
   }
 })()

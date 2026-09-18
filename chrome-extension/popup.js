@@ -54,6 +54,47 @@ function formatUpdatedAgo(updatedAt) {
   return new Date(updatedAt).toLocaleDateString()
 }
 
+const TRASH_ICON_PATH = 'M3 5h10M6.5 5V3.5h3V5M5 5l.6 8h4.8L11 5M6.8 7.4v3.2M9.2 7.4v3.2'
+
+function createTrashIcon() {
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+  const path = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+  svg.setAttribute('viewBox', '0 0 16 16')
+  svg.setAttribute('aria-hidden', 'true')
+  path.setAttribute('d', TRASH_ICON_PATH)
+  path.setAttribute('fill', 'none')
+  path.setAttribute('stroke', 'currentColor')
+  path.setAttribute('stroke-width', '1.3')
+  path.setAttribute('stroke-linecap', 'round')
+  path.setAttribute('stroke-linejoin', 'round')
+  svg.append(path)
+  return svg
+}
+
+function setDocumentsBusy(busy) {
+  for (const button of gistDocuments.querySelectorAll('button')) button.disabled = busy
+}
+
+async function deleteDocument(name) {
+  if (!window.confirm(`Delete "${name}" from the sync Gist?`)) return
+  setDocumentsBusy(true)
+  gistStatus.textContent = `Deleting ${name}…`
+  try {
+    const response = await extensionApi.runtime.sendMessage({
+      type: 'delete-gist-document',
+      documentName: name,
+    })
+    if (!response?.ok) throw new Error(response?.error || 'Unable to delete the document.')
+    gistUrl = response.gistUrl
+    gistOpen.hidden = !gistUrl
+    renderDocuments(response.documents)
+    gistStatus.textContent = `Deleted ${name}.`
+  } catch (error) {
+    gistStatus.textContent = error.message
+    setDocumentsBusy(false)
+  }
+}
+
 function renderDocuments(documents = []) {
   gistDocuments.replaceChildren()
   gistDocumentsHeading.hidden = documents.length === 0
@@ -61,9 +102,11 @@ function renderDocuments(documents = []) {
   for (const syncedDocument of documents) {
     const item = document.createElement('li')
     const button = document.createElement('button')
+    const deleteButton = document.createElement('button')
     const name = document.createElement('span')
     const updated = document.createElement('span')
     button.type = 'button'
+    button.className = 'document-list-select'
     name.className = 'document-list-name'
     name.textContent = syncedDocument.name
     updated.className = 'document-list-updated'
@@ -81,8 +124,14 @@ function renderDocuments(documents = []) {
         gistStatus.textContent = response?.error || 'Unable to select the document.'
       }
     })
+    deleteButton.type = 'button'
+    deleteButton.className = 'document-list-delete'
+    deleteButton.title = `Delete ${syncedDocument.name}`
+    deleteButton.setAttribute('aria-label', `Delete ${syncedDocument.name}`)
+    deleteButton.append(createTrashIcon())
+    deleteButton.addEventListener('click', () => deleteDocument(syncedDocument.name))
     button.append(name, updated)
-    item.append(button)
+    item.append(button, deleteButton)
     gistDocuments.append(item)
   }
 }
