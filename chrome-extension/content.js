@@ -12,9 +12,42 @@
   let toastHost
   let toastTimer
   let lastGistSaveAt = 0
+  let remotePollTimer
+  let extensionDetached = false
+  const DETACHED_MESSAGE = 'Textarea Sync was updated. Reload this page to keep syncing.'
   const AUTO_SAVE_DELAY = 3000
   const MIN_AUTO_SAVE_INTERVAL = 30000
   const REMOTE_POLL_INTERVAL = 30000
+
+  // Reloading or updating the extension orphans this script, and every later
+  // sendMessage throws synchronously. Stop the timers and ask for a reload.
+  function detachFromExtension() {
+    if (extensionDetached) return
+    extensionDetached = true
+    clearTimeout(timer)
+    clearTimeout(autoSaveTimer)
+    clearInterval(remotePollTimer)
+    showToast(DETACHED_MESSAGE)
+  }
+
+  function isDetachedError(error) {
+    if (!extensionApi?.runtime?.id) return true
+    return /Extension context invalidated|Receiving end does not exist/i
+      .test(String(error?.message || error))
+  }
+
+  function sendMessage(message) {
+    if (extensionDetached) return Promise.reject(new Error(DETACHED_MESSAGE))
+    try {
+      return Promise.resolve(extensionApi.runtime.sendMessage(message)).catch(error => {
+        if (isDetachedError(error)) detachFromExtension()
+        throw error
+      })
+    } catch (error) {
+      if (isDetachedError(error)) detachFromExtension()
+      return Promise.reject(new Error(extensionDetached ? DETACHED_MESSAGE : error.message))
+    }
+  }
 
   function applySyncedDocumentTitle() {
     const title = documentIsDirty ? `* ${syncedDocumentName}` : syncedDocumentName
@@ -69,12 +102,12 @@
   }
 
   async function autoSaveDocument() {
-    if (autoSaveInFlight || !documentIsDirty || !syncedDocumentName) return
+    if (extensionDetached || autoSaveInFlight || !documentIsDirty || !syncedDocumentName) return
     if (!location.hash || location.hash === '#new') return
 
     autoSaveInFlight = true
     try {
-      const localResponse = await extensionApi.runtime.sendMessage({
+      const localResponse = await sendMessage({
         type: 'save-current',
         url: location.href,
         title: syncedDocumentName,
@@ -82,7 +115,7 @@
       if (!localResponse?.ok) {
         throw new Error(localResponse?.error || 'Unable to capture the current document.')
       }
-      const response = await extensionApi.runtime.sendMessage({
+      const response = await sendMessage({
         type: 'sync-gist',
         documentName: syncedDocumentName,
       })
@@ -102,9 +135,10 @@
   }
 
   async function pollRemoteDocument() {
-    if (!syncedDocumentName || documentIsDirty || autoSaveInFlight || document.hidden) return
+    if (extensionDetached || !syncedDocumentName || documentIsDirty ||
+        autoSaveInFlight || document.hidden) return
 
-    const response = await extensionApi.runtime.sendMessage({
+    const response = await sendMessage({
       type: 'refresh-gist-document',
       documentName: syncedDocumentName,
     })
@@ -126,7 +160,7 @@
   }
 
   function scheduleAutoSave() {
-    if (!syncedDocumentName) return
+    if (extensionDetached || !syncedDocumentName) return
     const sinceLastSave = Date.now() - lastGistSaveAt
     const delay = Math.max(AUTO_SAVE_DELAY, MIN_AUTO_SAVE_INTERVAL - sinceLastSave)
     clearTimeout(autoSaveTimer)
@@ -138,7 +172,7 @@
   }
 
   function loadSyncedDocumentTitle() {
-    return extensionApi.runtime.sendMessage({
+    return sendMessage({
       type: 'get-gist-document-title',
       url: location.href,
     }).then(response => {
@@ -159,7 +193,7 @@
 
   function openExtensionSettings(button, onError) {
     button.disabled = true
-    extensionApi.runtime.sendMessage({type: 'open-sync-setup'})
+    sendMessage({type: 'open-sync-setup'})
       .then(response => {
         if (!response?.ok) throw new Error(response?.error || 'Unable to open extension settings.')
       })
@@ -175,7 +209,7 @@
     button.disabled = true
     status.textContent = 'Saving…'
     try {
-      const localResponse = await extensionApi.runtime.sendMessage({
+      const localResponse = await sendMessage({
         type: 'save-current',
         url: location.href,
         title: requestedName || syncedDocumentName || document.title,
@@ -183,7 +217,7 @@
       if (!localResponse?.ok) {
         throw new Error(localResponse?.error || 'Unable to capture the current document.')
       }
-      const response = await extensionApi.runtime.sendMessage({
+      const response = await sendMessage({
         type: 'sync-gist',
         documentName: requestedName,
       })
@@ -359,7 +393,7 @@
     menu.append(nameLabel, saveButton, settingsButton, status, recentDocumentsSection)
 
     async function loadRecentDocuments() {
-      const response = await extensionApi.runtime.sendMessage({
+      const response = await sendMessage({
         type: 'get-recent-gist-documents',
       })
       if (!response?.ok) {
@@ -382,7 +416,7 @@
           }
           button.disabled = true
           status.textContent = 'Switching…'
-          const selectResponse = await extensionApi.runtime.sendMessage({
+          const selectResponse = await sendMessage({
             type: 'select-gist-document',
             documentName: recentDocument.name,
           })
@@ -520,7 +554,7 @@
   }
 
   function checkGitHubConnection() {
-    extensionApi.runtime.sendMessage({type: 'get-github-connection'})
+    sendMessage({type: 'get-github-connection'})
       .then(response => {
         if (response?.ok && !response.connected) showGitHubPrompt()
       })
@@ -533,7 +567,7 @@
     const url = location.href
     if (!location.hash || location.hash === '#new' || url === lastSentUrl) return
     lastSentUrl = url
-    extensionApi.runtime.sendMessage({
+    sendMessage({
       type: 'save-current',
       url,
       title: syncedDocumentName || document.title,
@@ -548,6 +582,7 @@
   }
 
   function scheduleSave(delay = 1500) {
+    if (extensionDetached) return
     clearTimeout(timer)
     timer = setTimeout(sendCurrentUrl, delay)
   }
@@ -599,7 +634,7 @@
     }
     checkGitHubConnection()
     scheduleSave(0)
-    setInterval(pollRemoteDocumentQuietly, REMOTE_POLL_INTERVAL)
+    remotePollTimer = setInterval(pollRemoteDocumentQuietly, REMOTE_POLL_INTERVAL)
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) pollRemoteDocumentQuietly()
     })

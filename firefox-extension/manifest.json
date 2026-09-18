@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "Textarea Sync",
   "description": "Save and share named textarea.my documents across devices with GitHub Gists.",
-  "version": "0.1.21",
+  "version": "0.1.22",
   "permissions": ["storage"],
   "host_permissions": ["https://textarea.my/*", "https://api.github.com/*"],
   "background": {
