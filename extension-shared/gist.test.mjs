@@ -6,6 +6,7 @@ const {
   mergeDocuments,
   normalizeDocumentName,
   parseSyncFile,
+  remove,
   replace,
 } = globalThis.TextareaGist
 
@@ -149,6 +150,61 @@ const updateCall = replaceCalls.find(call => call.options.method === 'PATCH')
 assert.match(updateCall.url, /\/gists\/gist-1$/)
 const updatePayload = JSON.parse(JSON.parse(updateCall.options.body).files['textarea-sync.json'].content)
 assert.deepEqual(updatePayload.documents, [newDocument, remoteDocument])
+
+const removeCalls = []
+const removed = await remove(
+  {token: 'github-token', gistId: 'gist-1'},
+  'shopping LIST',
+  async (url, options) => {
+    removeCalls.push({url, options})
+    if (options.method === 'GET') {
+      return jsonResponse({
+        id: 'gist-1',
+        html_url: 'https://gist.github.com/octocat/gist-1',
+        files: {
+          'textarea-sync.json': {
+            content: JSON.stringify({version: 2, documents: [remoteDocument, newDocument]}),
+          },
+        },
+      })
+    }
+    if (options.method === 'PATCH') {
+      return jsonResponse({
+        id: 'gist-1',
+        html_url: 'https://gist.github.com/octocat/gist-1',
+        files: {'textarea-sync.json': {}},
+      })
+    }
+    assert.fail(`Unexpected GitHub request: ${options.method} ${url}`)
+  }
+)
+assert.equal(removed.removed, true)
+assert.deepEqual(removed.documents.map(value => value.name), [newDocument.name])
+const removePayload = JSON.parse(
+  JSON.parse(removeCalls.find(call => call.options.method === 'PATCH').options.body)
+    .files['textarea-sync.json'].content
+)
+assert.deepEqual(removePayload.documents.map(value => value.name), [newDocument.name])
+
+const missing = await remove(
+  {token: 'github-token', gistId: 'gist-1'},
+  'Absent document',
+  async (url, options) => {
+    if (options.method === 'GET') {
+      return jsonResponse({
+        id: 'gist-1',
+        html_url: 'https://gist.github.com/octocat/gist-1',
+        files: {
+          'textarea-sync.json': {
+            content: JSON.stringify({version: 2, documents: [remoteDocument]}),
+          },
+        },
+      })
+    }
+    assert.fail('Deleting an unknown document should not write the Gist.')
+  }
+)
+assert.equal(missing.removed, false)
 
 let githubError
 try {
