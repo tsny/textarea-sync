@@ -77,7 +77,7 @@ async function connectGitHub(message) {
   return {username: result.username, gistUrl: result.gistUrl}
 }
 
-async function getGistState() {
+async function getGistState({cached = false} = {}) {
   const credentials = await getGitHubCredentials()
   if (!credentials) return {connected: false}
 
@@ -91,6 +91,19 @@ async function getGistState() {
   const documentName = normalizeDocumentName(
     hasSelectedDocument ? localState[GIST_DOCUMENT_NAME_KEY] : latest?.title || 'Textarea'
   )
+  const localDocuments = Array.isArray(localState[GIST_DOCUMENTS_KEY])
+    ? localState[GIST_DOCUMENTS_KEY]
+    : []
+  if (cached) {
+    return {
+      connected: true,
+      username: credentials.username,
+      documentName,
+      documents: localDocuments,
+      gistUrl: localState[GIST_URL_KEY] || null,
+    }
+  }
+
   try {
     const remote = await loadGist(credentials)
     await extensionApi.storage.local.set({
@@ -109,9 +122,7 @@ async function getGistState() {
       connected: true,
       username: credentials.username,
       documentName,
-      documents: Array.isArray(localState[GIST_DOCUMENTS_KEY])
-        ? localState[GIST_DOCUMENTS_KEY]
-        : [],
+      documents: localDocuments,
       gistUrl: localState[GIST_URL_KEY] || null,
       error: error.message,
     }
@@ -309,7 +320,7 @@ function handleMessage(message, sender) {
   }
 
   if (message?.type === 'get-gist-state') {
-    return getGistState()
+    return getGistState({cached: message.cached === true})
       .then(state => ({ok: true, ...state}))
       .catch(error => ({ok: false, error: error.message}))
   }

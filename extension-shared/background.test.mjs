@@ -156,6 +156,18 @@ assert.equal(gistState.response.documentName, 'Work notes')
 assert.equal(gistState.response.documents[0].name, 'Work notes')
 
 await localStorage.set({
+  gistDocuments: [{
+    name: 'Cached only',
+    url: 'https://textarea.my/#cached',
+    title: 'Textarea',
+    updatedAt: 60,
+  }],
+})
+const cachedGistState = await sendMessage({type: 'get-gist-state', cached: true})
+assert.equal(cachedGistState.response.ok, true)
+assert.equal(cachedGistState.response.documents[0].name, 'Cached only')
+
+await localStorage.set({
   gistDocuments: [
     {
       name: 'Shared note',
