@@ -105,10 +105,18 @@ function showGistState(state) {
   renderDocuments(state.documents)
 }
 
-async function loadGistState() {
-  const response = await extensionApi.runtime.sendMessage({type: 'get-gist-state'})
+async function loadGistState({cached = false} = {}) {
+  const response = await extensionApi.runtime.sendMessage({type: 'get-gist-state', cached})
   if (!response?.ok) throw new Error(response?.error || 'Unable to check GitHub.')
   showGistState(response)
+  return response
+}
+
+// Show what we already have, then pull the gist so the list is current.
+async function loadAndRefreshGistState() {
+  const cachedState = await loadGistState({cached: true})
+  if (cachedState.connected) gistStatus.textContent = 'Refreshing documents…'
+  await loadGistState()
 }
 
 githubForm.addEventListener('submit', async event => {
@@ -193,7 +201,7 @@ githubTokenHelp.addEventListener('click', () => {
   window.close()
 })
 
-loadGistState().catch(error => {
+loadAndRefreshGistState().catch(error => {
   gistStatus.textContent = error.message
   githubForm.hidden = false
 })
