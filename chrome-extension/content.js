@@ -153,7 +153,17 @@
     if (remoteDocument.url === location.href) return
 
     showToast(`Loaded newer ${remoteDocument.name} from another device`)
-    location.replace(remoteDocument.url)
+    goToDocument(remoteDocument.url, {replace: true})
+  }
+
+  // textarea.my keeps the whole document in the URL hash, so pointing the
+  // browser at another one only fires hashchange and the old text stays on
+  // screen. Reload whenever the path is unchanged so the switch takes effect.
+  function goToDocument(url, {replace = false} = {}) {
+    const samePage = url.split('#')[0] === location.href.split('#')[0]
+    if (replace) location.replace(url)
+    else location.assign(url)
+    if (samePage) location.reload()
   }
 
   function pollRemoteDocumentQuietly() {
@@ -235,6 +245,25 @@
       button.disabled = false
       refreshActionsSaveButton()
     }
+  }
+
+  function createExternalLinkIcon() {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+    svg.setAttribute('viewBox', '0 0 16 16')
+    svg.setAttribute('width', '12')
+    svg.setAttribute('height', '12')
+    svg.setAttribute('fill', 'none')
+    svg.setAttribute('stroke', 'currentColor')
+    svg.setAttribute('stroke-width', '1.6')
+    svg.setAttribute('stroke-linecap', 'round')
+    svg.setAttribute('stroke-linejoin', 'round')
+    svg.setAttribute('aria-hidden', 'true')
+    const frame = document.createElementNS(svg.namespaceURI, 'path')
+    frame.setAttribute('d', 'M9.5 2.5H13.5V6.5M13.5 2.5L7.5 8.5')
+    const box = document.createElementNS(svg.namespaceURI, 'path')
+    box.setAttribute('d', 'M12 9.5v3a1 1 0 0 1-1 1H3.5a1 1 0 0 1-1-1V5a1 1 0 0 1 1-1h3')
+    svg.append(frame, box)
+    return svg
   }
 
   function showActionsMenu() {
@@ -327,11 +356,24 @@
         margin: 4px 9px 3px;
         text-transform: uppercase;
       }
-      .recent-documents button {
+      .recent-row { display: flex; gap: 2px; }
+      .recent-row .recent-name {
+        flex: 1;
+        min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
       }
+      .recent-row .recent-open {
+        align-items: center;
+        color: #666;
+        display: flex;
+        flex: none;
+        justify-content: center;
+        padding: 8px;
+        width: auto;
+      }
+      .recent-row .recent-open svg { display: block; }
       button:disabled { cursor: default; opacity: .6; }
       button:focus-visible { outline: 2px solid #0569fa; outline-offset: 2px; }
       @media (prefers-color-scheme: dark) {
@@ -356,6 +398,7 @@
         .status { color: #bbb; }
         .recent-documents { border-top-color: rgba(255, 255, 255, .16); }
         .recent-heading { color: #aaa; }
+        .recent-row .recent-open { color: #bbb; }
       }
     `
     const trigger = document.createElement('button')
@@ -421,10 +464,23 @@
       ))
       recentDocuments.replaceChildren()
       for (const recentDocument of documents) {
+        const row = document.createElement('div')
+        row.className = 'recent-row'
         const button = document.createElement('button')
+        button.className = 'recent-name'
         button.type = 'button'
         button.textContent = recentDocument.name
         button.title = `Switch to ${recentDocument.name}`
+        const openButton = document.createElement('button')
+        openButton.className = 'recent-open'
+        openButton.type = 'button'
+        openButton.title = `Open ${recentDocument.name} in a new tab`
+        openButton.setAttribute('aria-label', openButton.title)
+        openButton.append(createExternalLinkIcon())
+        openButton.addEventListener('click', () => {
+          setMenuOpen(false)
+          open(recentDocument.url, '_blank', 'noopener')
+        })
         button.addEventListener('click', async () => {
           if (documentIsDirty &&
               !confirm('This document has unsaved changes. Switch documents?')) {
@@ -441,9 +497,10 @@
             status.textContent = selectResponse?.error || 'Unable to switch documents.'
             return
           }
-          location.assign(recentDocument.url)
+          goToDocument(recentDocument.url)
         })
-        recentDocuments.append(button)
+        row.append(button, openButton)
+        recentDocuments.append(row)
       }
       recentDocumentsSection.hidden = documents.length === 0
     }

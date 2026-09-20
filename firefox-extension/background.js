@@ -242,6 +242,8 @@ async function refreshGistDocument(requestedDocumentName) {
   }
 }
 
+const RECENT_DOCUMENT_LIMIT = 8
+
 async function getRecentGistDocuments() {
   const state = await extensionApi.storage.local.get(GIST_DOCUMENTS_KEY)
   const documents = Array.isArray(state[GIST_DOCUMENTS_KEY]) ? state[GIST_DOCUMENTS_KEY] : []
@@ -255,7 +257,7 @@ async function getRecentGistDocuments() {
       url: `${TEXTAREA_ORIGIN}${document.path}`,
       updatedAt,
     }
-  }).filter(Boolean).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, 5)
+  }).filter(Boolean).sort((a, b) => b.updatedAt - a.updatedAt).slice(0, RECENT_DOCUMENT_LIMIT)
 }
 
 function documentFromUrl(value, title = 'Textarea') {

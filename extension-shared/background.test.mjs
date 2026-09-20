@@ -190,7 +190,7 @@ const documentTitle = await sendMessage(
 assert.deepEqual(documentTitle.response, {ok: true, name: 'Work notes'})
 
 await localStorage.set({
-  gistDocuments: Array.from({length: 6}, (_, index) => ({
+  gistDocuments: Array.from({length: 9}, (_, index) => ({
     name: `Recent ${index + 1}`,
     url: `https://textarea.my/#recent-${index + 1}`,
     title: 'Textarea',
@@ -203,7 +203,7 @@ const recentDocuments = await sendMessage(
 )
 assert.deepEqual(
   recentDocuments.response.documents.map(document => document.name),
-  ['Recent 6', 'Recent 5', 'Recent 4', 'Recent 3', 'Recent 2']
+  ['Recent 9', 'Recent 8', 'Recent 7', 'Recent 6', 'Recent 5', 'Recent 4', 'Recent 3', 'Recent 2']
 )
 
 const selectDocument = await sendMessage({
