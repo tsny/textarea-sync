@@ -18,6 +18,7 @@
   const AUTO_SAVE_DELAY = 3000
   const MIN_AUTO_SAVE_INTERVAL = 30000
   const REMOTE_POLL_INTERVAL = 30000
+  const INDENT = '  '
 
   // Reloading or updating the extension orphans this script, and every later
   // sendMessage throws synchronously. Stop the timers and ask for a reload.
@@ -599,6 +600,41 @@
     loadSyncedDocumentTitle()
     scheduleSave(0)
   })
+  // The page's contenteditable article lets Tab move focus out of the editor.
+  // Keep Tab in the document and spend it on indentation instead. execCommand
+  // is the only edit that keeps the browser's native undo stack intact.
+  function handleIndentKey(event) {
+    if (event.key !== 'Tab' || event.altKey || event.ctrlKey || event.metaKey) return
+    if (!documentArticle?.contains(event.target)) return
+    const selection = getSelection()
+    if (!selection?.rangeCount) return
+    event.preventDefault()
+    if (event.shiftKey) {
+      outdentAtCaret(selection)
+      return
+    }
+    document.execCommand('insertText', false, INDENT)
+  }
+
+  // Shift+Tab eats one indent worth of whitespace immediately before the caret.
+  function outdentAtCaret(selection) {
+    const range = selection.getRangeAt(0)
+    if (!range.collapsed) return
+    const node = range.startContainer
+    if (node.nodeType !== Node.TEXT_NODE) return
+    const before = node.textContent.slice(0, range.startOffset)
+    const match = new RegExp(`(?:\t| {1,${INDENT.length}})$`).exec(before)
+    if (!match) return
+    const doomed = document.createRange()
+    doomed.setStart(node, range.startOffset - match[0].length)
+    doomed.setEnd(node, range.startOffset)
+    selection.removeAllRanges()
+    selection.addRange(doomed)
+    document.execCommand('delete')
+  }
+
+  addEventListener('keydown', handleIndentKey, true)
+
   addEventListener('input', event => {
     scheduleSave()
     if (documentArticle?.contains(event.target)) setDocumentDirty(true)
