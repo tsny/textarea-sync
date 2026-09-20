@@ -5,6 +5,7 @@
   let githubPrompt
   let syncedDocumentName = ''
   let actionsDocumentNameInput
+  let refreshActionsSaveButton = () => {}
   let documentArticle
   let documentIsDirty = false
   let autoSaveTimer
@@ -60,6 +61,7 @@
   function setDocumentDirty(dirty) {
     documentIsDirty = Boolean(dirty && syncedDocumentName)
     applySyncedDocumentTitle()
+    refreshActionsSaveButton()
   }
 
   function showToast(message) {
@@ -186,6 +188,7 @@
           actionsDocumentNameInput.value = syncedDocumentName
         }
         applySyncedDocumentTitle()
+        refreshActionsSaveButton()
       }
     }).catch(() => {
       // The extension may have been reloaded while this tab stayed open.
@@ -230,6 +233,7 @@
       status.textContent = 'Saved.'
     } finally {
       button.disabled = false
+      refreshActionsSaveButton()
     }
   }
 
@@ -377,6 +381,17 @@
     const saveButton = document.createElement('button')
     saveButton.type = 'button'
     saveButton.textContent = 'Save current document'
+    // Saving is only worth offering when it would change something: unsaved
+    // edits, a document that has never been named, or a pending rename.
+    refreshActionsSaveButton = () => {
+      const renaming = nameInput.value.trim() !== syncedDocumentName
+      const saveable = documentIsDirty || !syncedDocumentName || renaming
+      saveButton.disabled = !saveable
+      saveButton.title = saveable ? '' : 'No changes since the last save'
+    }
+    refreshActionsSaveButton()
+    nameInput.addEventListener('input', refreshActionsSaveButton)
+
     const settingsButton = document.createElement('button')
     settingsButton.type = 'button'
     settingsButton.textContent = 'Extension settings'
@@ -441,6 +456,7 @@
     trigger.addEventListener('click', () => {
       const open = menu.hidden
       setMenuOpen(open)
+      refreshActionsSaveButton()
       if (open) loadRecentDocuments().catch(() => {
         recentDocumentsSection.hidden = true
       })
