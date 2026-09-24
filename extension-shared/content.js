@@ -14,6 +14,7 @@
   let toastTimer
   let lastGistSaveAt = 0
   let remotePollTimer
+  let nextRemotePollAt = 0
   let extensionDetached = false
   const DETACHED_MESSAGE = 'Textarea Sync was updated. Reload this page to keep syncing.'
   const AUTO_SAVE_DELAY = 3000
@@ -154,6 +155,18 @@
 
     showToast(`Loaded newer ${remoteDocument.name} from another device`)
     goToDocument(remoteDocument.url, {replace: true})
+    return true
+  }
+
+  // Restarting the interval lets a manual check reset the countdown.
+
+  function startRemotePolling() {
+    clearInterval(remotePollTimer)
+    nextRemotePollAt = Date.now() + REMOTE_POLL_INTERVAL
+    remotePollTimer = setInterval(() => {
+      nextRemotePollAt = Date.now() + REMOTE_POLL_INTERVAL
+      pollRemoteDocumentQuietly()
+    }, REMOTE_POLL_INTERVAL)
   }
 
   // textarea.my keeps the whole document in the URL hash, so pointing the
@@ -266,190 +279,253 @@
     return svg
   }
 
+  function createMenuIcon(pathData) {
+    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+    svg.setAttribute('viewBox', '0 0 24 24')
+    svg.setAttribute('width', '22')
+    svg.setAttribute('height', '22')
+    svg.setAttribute('fill', 'none')
+    svg.setAttribute('stroke', 'currentColor')
+    svg.setAttribute('stroke-width', '1.25')
+    svg.setAttribute('stroke-linecap', 'round')
+    svg.setAttribute('stroke-linejoin', 'round')
+    svg.setAttribute('aria-hidden', 'true')
+    for (const d of pathData) {
+      const path = document.createElementNS(svg.namespaceURI, 'path')
+      path.setAttribute('d', d)
+      svg.append(path)
+    }
+    return svg
+  }
+
+  // Adds the extension's actions to the bottom of textarea.my's own menu.
+  // Items reuse the page's `.item` class so they follow its theme.
+
   function showActionsMenu() {
-    const host = document.createElement('div')
-    const shadow = host.attachShadow({mode: 'closed'})
+    const menu = document.querySelector('#menu')
+    const menuButton = document.querySelector('#button')
+    if (!menu || !menuButton) return
+
     const style = document.createElement('style')
     style.textContent = `
-      :host {
-        all: initial;
-        position: fixed;
-        right: max(8px, env(safe-area-inset-right));
-        top: max(8px, env(safe-area-inset-top));
-        z-index: 2147483647;
+      #menu {
+        --ts-top: #f7f4ee;
+        --ts-bottom: #e4ded2;
+        --ts-edge: #b7ae9e;
+        --ts-highlight: rgba(255, 255, 255, .85);
+        --ts-shade: rgba(60, 45, 20, .18);
+        --ts-well: #fbfaf7;
+        --ts-ink: #2e2a24;
+        background: linear-gradient(180deg, var(--ts-top), var(--ts-bottom));
+        border: 1px solid var(--ts-edge);
+        box-shadow:
+          inset 0 1px 0 var(--ts-highlight),
+          0 1px 0 rgba(0, 0, 0, .08),
+          0 14px 34px rgba(0, 0, 0, .32),
+          0 3px 8px rgba(0, 0, 0, .18);
+        gap: 4px;
+        padding: 6px;
+        width: min(calc(100vw - 32px), max(180px, 30vw));
       }
-      .trigger {
-        appearance: none;
-        background: rgba(248, 248, 248, .94);
-        border: 1px solid rgba(0, 0, 0, .2);
-        border-radius: 999px;
-        box-shadow: 0 1px 4px rgba(0, 0, 0, .12);
-        color: #3b3b3b;
-        cursor: pointer;
-        font: 600 11px/1.2 system-ui, sans-serif;
-        min-height: 32px;
-        padding: 6px 10px;
+      @media (prefers-color-scheme: dark) {
+        #menu {
+          --ts-top: #3a3834;
+          --ts-bottom: #25231f;
+          --ts-edge: #0d0c0a;
+          --ts-highlight: rgba(255, 255, 255, .12);
+          --ts-shade: rgba(0, 0, 0, .45);
+          --ts-well: #1a1916;
+          --ts-ink: #ece6da;
+        }
       }
-      .trigger:hover { background: #fff; }
-      .menu {
-        background: rgba(248, 248, 248, .98);
-        border: 1px solid rgba(0, 0, 0, .2);
-        border-radius: 9px;
-        box-shadow: 0 4px 16px rgba(0, 0, 0, .18);
-        box-sizing: border-box;
-        margin-top: 6px;
-        padding: 5px;
-        position: absolute;
-        right: 0;
-        width: 210px;
+      #menu .item,
+      #menu .item:first-child,
+      #menu .item:last-child {
+        background: linear-gradient(180deg,
+          color-mix(in srgb, var(--ts-top) 70%, white 30%), var(--ts-top));
+        border: 1px solid color-mix(in srgb, var(--ts-edge) 70%, transparent);
+        border-radius: 7px;
+        box-shadow: inset 0 1px 0 var(--ts-highlight), 0 1px 2px var(--ts-shade);
+        color: var(--ts-ink);
+        text-shadow: 0 1px 0 var(--ts-highlight);
       }
-      .menu[hidden] { display: none; }
-      .menu button {
-        appearance: none;
+      @media (prefers-color-scheme: dark) {
+        #menu .item,
+        #menu .item:first-child,
+        #menu .item:last-child {
+          background: linear-gradient(180deg, #45423d, #312f2a);
+          text-shadow: 0 -1px 0 rgba(0, 0, 0, .6);
+        }
+      }
+      #menu .item:hover,
+      #menu .ts-section .item:hover {
+        background: linear-gradient(180deg,
+          color-mix(in srgb, var(--ts-top) 50%, white 50%), var(--ts-top));
+      }
+      @media (prefers-color-scheme: dark) {
+        #menu .item:hover,
+        #menu .ts-section .item:hover { background: linear-gradient(180deg, #524e48, #3a3732); }
+      }
+      #menu .item:active,
+      #menu .ts-section .item:active {
+        background: var(--ts-bottom);
+        box-shadow: inset 0 2px 4px var(--ts-shade);
+        transform: translateY(1px);
+      }
+      #menu .ts-section {
+        border-top: 1px solid var(--ts-shade);
+        box-shadow: inset 0 1px 0 var(--ts-highlight);
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        margin-top: 4px;
+        padding-top: 8px;
+      }
+      #menu .ts-section .item { width: 100%; }
+      #menu .ts-section .item:disabled { cursor: default; opacity: .5; }
+      #menu .ts-section .item:disabled,
+      #menu .ts-section .item:disabled:hover {
+        background: var(--ts-bottom);
+        box-shadow: none;
+        transform: none;
+      }
+      #menu .ts-section .item:focus-visible { outline: 2px solid var(--outline); }
+      #menu .ts-name {
         background: transparent;
-        border: 0;
+        background: var(--ts-well);
+        border: 1px solid var(--ts-edge);
         border-radius: 6px;
-        color: #3b3b3b;
-        cursor: pointer;
-        display: block;
-        font: 600 12px/1.2 system-ui, sans-serif;
-        min-height: 36px;
-        padding: 8px 9px;
-        text-align: left;
+        box-shadow: inset 0 2px 3px var(--ts-shade), 0 1px 0 var(--ts-highlight);
+        box-sizing: border-box;
+        color: var(--ts-ink);
+        font: 14px / 1.4 system-ui;
+        margin: 4px 0;
+        padding: 7px 9px;
         width: 100%;
       }
-      .menu button:hover { background: rgba(0, 0, 0, .07); }
-      label {
-        color: #555;
-        display: block;
-        font: 600 11px/1.2 system-ui, sans-serif;
-        padding: 5px 9px 3px;
+      #menu .ts-name:focus { outline: 2px solid var(--outline); outline-offset: -1px; }
+      #menu .ts-status {
+        font: 13px / 1.4 system-ui;
+        color: var(--ts-ink);
+        margin: 0 4px 2px;
+        opacity: .75;
       }
-      input {
-        background: #fff;
-        border: 1px solid rgba(0, 0, 0, .25);
-        border-radius: 5px;
-        box-sizing: border-box;
-        color: #222;
-        display: block;
-        font: 12px/1.2 system-ui, sans-serif;
-        margin: 0 5px 5px;
-        min-height: 34px;
-        padding: 7px 8px;
-        width: calc(100% - 10px);
-      }
-      .status {
-        color: #666;
-        font: 11px/1.3 system-ui, sans-serif;
-        margin: 3px 9px 5px;
-      }
-      .status:empty { display: none; }
-      .recent-documents {
-        border-top: 1px solid rgba(0, 0, 0, .14);
-        margin-top: 5px;
-        padding-top: 5px;
-      }
-      .recent-documents[hidden] { display: none; }
-      .recent-heading {
-        color: #666;
-        font: 600 10px/1.2 system-ui, sans-serif;
-        margin: 4px 9px 3px;
+      #menu .ts-status:empty { display: none; }
+      #menu .ts-heading {
+        font: 600 11px / 1.2 system-ui;
+        letter-spacing: .04em;
+        color: var(--ts-ink);
+        margin: 6px 4px 0;
+        opacity: .6;
+        text-shadow: 0 1px 0 var(--ts-highlight);
         text-transform: uppercase;
       }
-      .recent-row { display: flex; gap: 2px; }
-      .recent-row .recent-name {
+      #menu .ts-recent[hidden] { display: none; }
+      #menu .ts-recent-row { display: flex; gap: 4px; }
+      #menu .ts-recent { display: flex; flex-direction: column; gap: 4px; }
+      #menu .ts-recent > div { display: flex; flex-direction: column; gap: 4px; }
+      #menu .ts-recent-row .ts-recent-name {
         flex: 1;
         min-width: 0;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
+        display: block;
       }
-      .recent-row .recent-open {
-        align-items: center;
-        color: #666;
-        display: flex;
+      #menu .ts-recent-row .ts-recent-open {
         flex: none;
         justify-content: center;
-        padding: 8px;
+        opacity: .7;
+        padding: 10px;
         width: auto;
       }
-      .recent-row .recent-open svg { display: block; }
-      button:disabled { cursor: default; opacity: .6; }
-      button:focus-visible { outline: 2px solid #0569fa; outline-offset: 2px; }
-      @media (prefers-color-scheme: dark) {
-        .trigger {
-          background: rgba(42, 42, 42, .94);
-          border-color: rgba(255, 255, 255, .25);
-          color: #e8e8e8;
-        }
-        .trigger:hover { background: #333; }
-        .menu {
-          background: rgba(42, 42, 42, .98);
-          border-color: rgba(255, 255, 255, .25);
-        }
-        .menu button { color: #e8e8e8; }
-        .menu button:hover { background: rgba(255, 255, 255, .1); }
-        label { color: #bbb; }
-        input {
-          background: #252525;
-          border-color: rgba(255, 255, 255, .25);
-          color: #eee;
-        }
-        .status { color: #bbb; }
-        .recent-documents { border-top-color: rgba(255, 255, 255, .16); }
-        .recent-heading { color: #aaa; }
-        .recent-row .recent-open { color: #bbb; }
-      }
     `
-    const trigger = document.createElement('button')
-    trigger.className = 'trigger'
-    trigger.type = 'button'
-    trigger.textContent = 'Actions ▾'
-    trigger.setAttribute('aria-expanded', 'false')
-    trigger.setAttribute('aria-haspopup', 'dialog')
-    const menu = document.createElement('div')
-    menu.className = 'menu'
-    menu.hidden = true
-    menu.setAttribute('role', 'dialog')
-    menu.setAttribute('aria-label', 'Textarea Sync actions')
-    const nameLabel = document.createElement('label')
-    nameLabel.textContent = 'Document name'
+    document.head.append(style)
+
+    const section = document.createElement('div')
+    section.className = 'ts-section'
+
     const nameInput = document.createElement('input')
+    nameInput.className = 'ts-name'
     nameInput.type = 'text'
     nameInput.maxLength = 100
-    nameInput.placeholder = 'Generated if blank'
+    nameInput.placeholder = 'Document name'
+    nameInput.setAttribute('aria-label', 'Document name')
     nameInput.value = syncedDocumentName
-    nameLabel.append(nameInput)
     actionsDocumentNameInput = nameInput
+
     const saveButton = document.createElement('button')
+    saveButton.className = 'item'
     saveButton.type = 'button'
-    saveButton.textContent = 'Save current document'
+    saveButton.setAttribute('role', 'menuitem')
+    saveButton.append(createMenuIcon([
+      'M6 4h10l4 4v12a1 1 0 0 1 -1 1h-14a1 1 0 0 1 -1 -1v-15a1 1 0 0 1 1 -1',
+      'M12 17m-2 0a2 2 0 1 0 4 0a2 2 0 1 0 -4 0',
+      'M9 4l0 5l6 0l0 -5',
+    ]), 'Save to gist')
+
     // Saving is only worth offering when it would change something: unsaved
     // edits, a document that has never been named, or a pending rename.
+
     refreshActionsSaveButton = () => {
       const renaming = nameInput.value.trim() !== syncedDocumentName
       const saveable = documentIsDirty || !syncedDocumentName || renaming
       saveButton.disabled = !saveable
       saveButton.title = saveable ? '' : 'No changes since the last save'
+      refreshUpdateButton()
     }
-    refreshActionsSaveButton()
     nameInput.addEventListener('input', refreshActionsSaveButton)
 
     const settingsButton = document.createElement('button')
+    settingsButton.className = 'item'
     settingsButton.type = 'button'
-    settingsButton.textContent = 'Extension settings'
+    settingsButton.setAttribute('role', 'menuitem')
+    settingsButton.append(createMenuIcon([
+      'M10.3 4.3c.4 -1.8 3 -1.8 3.4 0a1.7 1.7 0 0 0 2.6 1.1c1.5 -.9 3.3 .8 2.4 2.4a1.7 1.7 0 0 0 1 2.5c1.8 .4 1.8 3 0 3.4a1.7 1.7 0 0 0 -1 2.6c.9 1.5 -.9 3.3 -2.4 2.4a1.7 1.7 0 0 0 -2.6 1c-.4 1.8 -3 1.8 -3.4 0a1.7 1.7 0 0 0 -2.5 -1c-1.6 .9 -3.3 -.9 -2.4 -2.4a1.7 1.7 0 0 0 -1.1 -2.6c-1.8 -.4 -1.8 -3 0 -3.4a1.7 1.7 0 0 0 1.1 -2.5c-.9 -1.6 .8 -3.3 2.4 -2.4c1 .6 2.3 .1 2.5 -1.1',
+      'M9 12a3 3 0 1 0 6 0a3 3 0 0 0 -6 0',
+    ]), 'Sync settings')
+
+    const updateButton = document.createElement('button')
+    updateButton.className = 'item'
+    updateButton.type = 'button'
+    updateButton.setAttribute('role', 'menuitem')
+    const updateLabel = document.createElement('span')
+    updateButton.append(createMenuIcon([
+      'M20 11a8.1 8.1 0 0 0 -15.5 -2m-.5 -4v4h4',
+      'M4 13a8.1 8.1 0 0 0 15.5 2m.5 4v-4h-4',
+    ]), updateLabel)
+    let checkingForUpdates = false
+
+    function refreshUpdateButton() {
+      const seconds = Math.max(0, Math.ceil((nextRemotePollAt - Date.now()) / 1000))
+      updateLabel.textContent = checkingForUpdates
+        ? 'Checking…'
+        : `Check for updates (${seconds}s)`
+      updateButton.disabled = checkingForUpdates || documentIsDirty || !syncedDocumentName
+      updateButton.title = documentIsDirty ? 'Save or discard changes first' : ''
+    }
+
+    refreshActionsSaveButton()
+
     const status = document.createElement('p')
-    status.className = 'status'
+    status.className = 'ts-status'
     status.setAttribute('aria-live', 'polite')
+
     const recentDocumentsSection = document.createElement('div')
-    recentDocumentsSection.className = 'recent-documents'
+    recentDocumentsSection.className = 'ts-recent'
     recentDocumentsSection.hidden = true
     const recentHeading = document.createElement('p')
-    recentHeading.className = 'recent-heading'
+    recentHeading.className = 'ts-heading'
     recentHeading.textContent = 'Recent documents'
     const recentDocuments = document.createElement('div')
     recentDocumentsSection.append(recentHeading, recentDocuments)
-    menu.append(nameLabel, saveButton, settingsButton, status, recentDocumentsSection)
+
+    section.append(nameInput, status, saveButton, updateButton, settingsButton, recentDocumentsSection)
+    menu.append(section)
+
+    function closeMenu() {
+      menu.classList.remove('visible')
+    }
 
     async function loadRecentDocuments() {
       const response = await sendMessage({
@@ -465,20 +541,21 @@
       recentDocuments.replaceChildren()
       for (const recentDocument of documents) {
         const row = document.createElement('div')
-        row.className = 'recent-row'
+        row.className = 'ts-recent-row'
         const button = document.createElement('button')
-        button.className = 'recent-name'
+        button.className = 'item ts-recent-name'
         button.type = 'button'
+        button.setAttribute('role', 'menuitem')
         button.textContent = recentDocument.name
         button.title = `Switch to ${recentDocument.name}`
         const openButton = document.createElement('button')
-        openButton.className = 'recent-open'
+        openButton.className = 'item ts-recent-open'
         openButton.type = 'button'
         openButton.title = `Open ${recentDocument.name} in a new tab`
         openButton.setAttribute('aria-label', openButton.title)
         openButton.append(createExternalLinkIcon())
         openButton.addEventListener('click', () => {
-          setMenuOpen(false)
+          closeMenu()
           open(recentDocument.url, '_blank', 'noopener')
         })
         button.addEventListener('click', async () => {
@@ -505,18 +582,13 @@
       recentDocumentsSection.hidden = documents.length === 0
     }
 
-    function setMenuOpen(open) {
-      menu.hidden = !open
-      trigger.setAttribute('aria-expanded', String(open))
-    }
-
-    trigger.addEventListener('click', () => {
-      const open = menu.hidden
-      setMenuOpen(open)
+    menuButton.addEventListener('click', () => {
       refreshActionsSaveButton()
-      if (open) loadRecentDocuments().catch(() => {
-        recentDocumentsSection.hidden = true
-      })
+      if (menu.classList.contains('visible')) {
+        loadRecentDocuments().catch(() => {
+          recentDocumentsSection.hidden = true
+        })
+      }
     })
     function saveFromMenu() {
       saveCurrentDocument(saveButton, status, nameInput.value.trim()).catch(error => {
@@ -524,6 +596,23 @@
       })
     }
     saveButton.addEventListener('click', saveFromMenu)
+    updateButton.addEventListener('click', async () => {
+      checkingForUpdates = true
+      refreshUpdateButton()
+      startRemotePolling()
+      try {
+        const loaded = await pollRemoteDocument()
+        if (!loaded) status.textContent = 'Already up to date.'
+      } catch (error) {
+        status.textContent = error.message
+      } finally {
+        checkingForUpdates = false
+        refreshUpdateButton()
+      }
+    })
+    setInterval(() => {
+      if (menu.classList.contains('visible')) refreshUpdateButton()
+    }, 1000)
     nameInput.addEventListener('keydown', event => {
       if (event.key === 'Enter') {
         event.preventDefault()
@@ -531,20 +620,12 @@
       }
     })
     settingsButton.addEventListener('click', () => {
-      setMenuOpen(false)
+      closeMenu()
       openExtensionSettings(settingsButton, error => {
         status.textContent = error.message
-        setMenuOpen(true)
+        menu.classList.add('visible')
       })
     })
-    document.addEventListener('pointerdown', event => {
-      if (!event.composedPath().includes(host)) setMenuOpen(false)
-    })
-    document.addEventListener('keydown', event => {
-      if (event.key === 'Escape') setMenuOpen(false)
-    })
-    shadow.append(style, trigger, menu)
-    document.documentElement.append(host)
   }
 
   function hideGitHubPrompt() {
@@ -743,7 +824,7 @@
     }
     checkGitHubConnection()
     scheduleSave(0)
-    remotePollTimer = setInterval(pollRemoteDocumentQuietly, REMOTE_POLL_INTERVAL)
+    startRemotePolling()
     document.addEventListener('visibilitychange', () => {
       if (!document.hidden) pollRemoteDocumentQuietly()
     })
