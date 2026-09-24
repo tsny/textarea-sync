@@ -282,11 +282,11 @@
   function createMenuIcon(pathData) {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
     svg.setAttribute('viewBox', '0 0 24 24')
-    svg.setAttribute('width', '22')
-    svg.setAttribute('height', '22')
+    svg.setAttribute('width', '17')
+    svg.setAttribute('height', '17')
     svg.setAttribute('fill', 'none')
     svg.setAttribute('stroke', 'currentColor')
-    svg.setAttribute('stroke-width', '1.25')
+    svg.setAttribute('stroke-width', '1.5')
     svg.setAttribute('stroke-linecap', 'round')
     svg.setAttribute('stroke-linejoin', 'round')
     svg.setAttribute('aria-hidden', 'true')
@@ -323,9 +323,12 @@
           0 1px 0 rgba(0, 0, 0, .08),
           0 14px 34px rgba(0, 0, 0, .32),
           0 3px 8px rgba(0, 0, 0, .18);
-        gap: 4px;
-        padding: 6px;
-        width: min(calc(100vw - 32px), max(180px, 30vw));
+        gap: 3px;
+        padding: 5px;
+        width: min(calc(100vw - 32px), max(240px, 26vw), 340px);
+        max-height: calc(100vh - 80px);
+        overflow-y: auto;
+        overscroll-behavior: contain;
       }
       @media (prefers-color-scheme: dark) {
         #menu {
@@ -347,7 +350,16 @@
         border-radius: 7px;
         box-shadow: inset 0 1px 0 var(--ts-highlight), 0 1px 2px var(--ts-shade);
         color: var(--ts-ink);
+        font-size: 13px;
+        line-height: 1.3;
+        min-height: 0;
+        padding: 6px 8px;
         text-shadow: 0 1px 0 var(--ts-highlight);
+      }
+      #menu .item svg,
+      #menu .item img {
+        height: 17px;
+        width: 17px;
       }
       @media (prefers-color-scheme: dark) {
         #menu .item,
@@ -377,9 +389,9 @@
         box-shadow: inset 0 1px 0 var(--ts-highlight);
         display: flex;
         flex-direction: column;
-        gap: 4px;
-        margin-top: 4px;
-        padding-top: 8px;
+        gap: 3px;
+        margin-top: 3px;
+        padding-top: 6px;
       }
       #menu .ts-section .item { width: 100%; }
       #menu .ts-section .item:disabled { cursor: default; opacity: .5; }
@@ -398,16 +410,16 @@
         box-shadow: inset 0 2px 3px var(--ts-shade), 0 1px 0 var(--ts-highlight);
         box-sizing: border-box;
         color: var(--ts-ink);
-        font: 14px / 1.4 system-ui;
-        margin: 4px 0;
-        padding: 7px 9px;
+        font: 13px / 1.3 system-ui;
+        margin: 2px 0;
+        padding: 5px 8px;
         width: 100%;
       }
       #menu .ts-name:focus { outline: 2px solid var(--outline); outline-offset: -1px; }
       #menu .ts-status {
-        font: 13px / 1.4 system-ui;
+        font: 12px / 1.35 system-ui;
         color: var(--ts-ink);
-        margin: 0 4px 2px;
+        margin: 0 4px 1px;
         opacity: .75;
       }
       #menu .ts-status:empty { display: none; }
@@ -415,15 +427,22 @@
         font: 600 11px / 1.2 system-ui;
         letter-spacing: .04em;
         color: var(--ts-ink);
-        margin: 6px 4px 0;
+        margin: 4px 4px 0;
         opacity: .6;
         text-shadow: 0 1px 0 var(--ts-highlight);
         text-transform: uppercase;
       }
       #menu .ts-recent[hidden] { display: none; }
-      #menu .ts-recent-row { display: flex; gap: 4px; }
-      #menu .ts-recent { display: flex; flex-direction: column; gap: 4px; }
-      #menu .ts-recent > div { display: flex; flex-direction: column; gap: 4px; }
+      #menu .ts-recent-row { display: flex; gap: 3px; }
+      #menu .ts-recent { display: flex; flex-direction: column; gap: 3px; min-height: 0; }
+      #menu .ts-recent > div {
+        display: flex;
+        flex-direction: column;
+        gap: 3px;
+        max-height: 40vh;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+      }
       #menu .ts-recent-row .ts-recent-name {
         flex: 1;
         min-width: 0;
@@ -436,7 +455,7 @@
         flex: none;
         justify-content: center;
         opacity: .7;
-        padding: 10px;
+        padding: 6px;
         width: auto;
       }
     `
