@@ -824,6 +824,17 @@
       ::highlight(ts-number) { color: #f4b678; }
       ::highlight(ts-keyword) { color: #c792ea; }
       ::highlight(ts-call) { color: #82aaff; }
+      ::highlight(ts-rule) { color: transparent; }
+      .ts-rules {
+        left: 0;
+        pointer-events: none;
+        position: absolute;
+        top: 0;
+      }
+      .ts-rules > div {
+        border-top: 1px solid #444;
+        position: absolute;
+      }
     `
     document.documentElement.append(style)
   }
@@ -841,6 +852,52 @@
     ['ts-number', /\b\d+(?:\.\d+)?\b/g],
     ['ts-call', /\b[A-Za-z_]\w*(?=\s*\()/g],
   ]
+
+  // A line of three or more hyphens becomes a horizontal rule. The hyphens stay
+  // in the text but turn transparent, and a line is drawn over them in a layer
+  // outside the editor.
+
+  const RULE_LINE = /^[ \t]*-{3,}[ \t]*$/gm
+  let ruleLayer
+  let ruleFrame
+
+  function scheduleRules() {
+    cancelAnimationFrame(ruleFrame)
+    ruleFrame = requestAnimationFrame(renderRules)
+  }
+
+  function renderRules() {
+    if (!documentArticle) return
+    if (!ruleLayer) {
+      ruleLayer = document.createElement('div')
+      ruleLayer.className = 'ts-rules noprint'
+      document.body.append(ruleLayer)
+    }
+    const ranges = []
+    const walker = document.createTreeWalker(documentArticle, NodeFilter.SHOW_TEXT)
+    while (walker.nextNode()) {
+      const node = walker.currentNode
+      if (node.parentElement.closest('.md-code, .md-codeblock')) continue
+      for (const match of node.data.matchAll(RULE_LINE)) {
+        const range = new Range()
+        range.setStart(node, match.index)
+        range.setEnd(node, match.index + match[0].length)
+        ranges.push(range)
+      }
+    }
+    if (globalThis.CSS?.highlights) CSS.highlights.set('ts-rule', new Highlight(...ranges))
+
+    const box = documentArticle.getBoundingClientRect()
+    const styles = getComputedStyle(documentArticle)
+    const left = box.left + scrollX + parseFloat(styles.paddingLeft)
+    const width = box.width - parseFloat(styles.paddingLeft) - parseFloat(styles.paddingRight)
+    ruleLayer.replaceChildren(...ranges.map(range => {
+      const rect = range.getBoundingClientRect()
+      const line = document.createElement('div')
+      line.style.cssText = `top:${rect.top + scrollY + rect.height / 2}px;left:${left}px;width:${width}px`
+      return line
+    }))
+  }
 
   function highlightCode() {
     if (!globalThis.CSS?.highlights || !documentArticle) return
@@ -883,8 +940,11 @@
     documentArticle = document.querySelector('article')
     if (documentArticle) {
       highlightCode()
+      scheduleRules()
+      addEventListener('resize', scheduleRules)
       new MutationObserver(() => {
         highlightCode()
+        scheduleRules()
         scheduleSave()
         scheduleAutoSave()
       }).observe(documentArticle, {
