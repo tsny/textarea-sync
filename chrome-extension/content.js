@@ -309,13 +309,13 @@
     const style = document.createElement('style')
     style.textContent = `
       #menu {
-        --ts-top: #f7f4ee;
-        --ts-bottom: #e4ded2;
-        --ts-edge: #b7ae9e;
-        --ts-highlight: rgba(255, 255, 255, .85);
-        --ts-shade: rgba(60, 45, 20, .18);
-        --ts-well: #fbfaf7;
-        --ts-ink: #2e2a24;
+        --ts-top: #3a3834;
+        --ts-bottom: #25231f;
+        --ts-edge: #0d0c0a;
+        --ts-highlight: rgba(255, 255, 255, .12);
+        --ts-shade: rgba(0, 0, 0, .45);
+        --ts-well: #1a1916;
+        --ts-ink: #ece6da;
         background: linear-gradient(180deg, var(--ts-top), var(--ts-bottom));
         border: 1px solid var(--ts-edge);
         box-shadow:
@@ -330,22 +330,10 @@
         overflow-y: auto;
         overscroll-behavior: contain;
       }
-      @media (prefers-color-scheme: dark) {
-        #menu {
-          --ts-top: #3a3834;
-          --ts-bottom: #25231f;
-          --ts-edge: #0d0c0a;
-          --ts-highlight: rgba(255, 255, 255, .12);
-          --ts-shade: rgba(0, 0, 0, .45);
-          --ts-well: #1a1916;
-          --ts-ink: #ece6da;
-        }
-      }
       #menu .item,
       #menu .item:first-child,
       #menu .item:last-child {
-        background: linear-gradient(180deg,
-          color-mix(in srgb, var(--ts-top) 70%, white 30%), var(--ts-top));
+        background: linear-gradient(180deg, #45423d, #312f2a);
         border: 1px solid color-mix(in srgb, var(--ts-edge) 70%, transparent);
         border-radius: 7px;
         box-shadow: inset 0 1px 0 var(--ts-highlight), 0 1px 2px var(--ts-shade);
@@ -354,29 +342,16 @@
         line-height: 1.3;
         min-height: 0;
         padding: 6px 8px;
-        text-shadow: 0 1px 0 var(--ts-highlight);
+        text-shadow: 0 -1px 0 rgba(0, 0, 0, .6);
       }
       #menu .item svg,
       #menu .item img {
         height: 17px;
         width: 17px;
       }
-      @media (prefers-color-scheme: dark) {
-        #menu .item,
-        #menu .item:first-child,
-        #menu .item:last-child {
-          background: linear-gradient(180deg, #45423d, #312f2a);
-          text-shadow: 0 -1px 0 rgba(0, 0, 0, .6);
-        }
-      }
       #menu .item:hover,
       #menu .ts-section .item:hover {
-        background: linear-gradient(180deg,
-          color-mix(in srgb, var(--ts-top) 50%, white 50%), var(--ts-top));
-      }
-      @media (prefers-color-scheme: dark) {
-        #menu .item:hover,
-        #menu .ts-section .item:hover { background: linear-gradient(180deg, #524e48, #3a3732); }
+        background: linear-gradient(180deg, #524e48, #3a3732);
       }
       #menu .item:active,
       #menu .ts-section .item:active {
@@ -668,11 +643,11 @@
         z-index: 2147483647;
       }
       aside {
-        background: #fff;
-        border: 1px solid rgba(0, 0, 0, .18);
+        background: #292929;
+        border: 1px solid rgba(255, 255, 255, .2);
         border-radius: 10px;
         box-shadow: 0 6px 24px rgba(0, 0, 0, .18);
-        color: #242424;
+        color: #eee;
         font: 14px/1.4 system-ui, sans-serif;
         padding: 14px;
       }
@@ -689,17 +664,9 @@
         padding: 8px 11px;
       }
       button:first-child { background: #0569fa; color: #fff; }
-      button:last-child { background: transparent; color: #555; }
+      button:last-child { background: transparent; color: #ccc; }
       button:disabled { cursor: default; opacity: .6; }
       button:focus-visible { outline: 2px solid #0569fa; outline-offset: 2px; }
-      @media (prefers-color-scheme: dark) {
-        aside {
-          background: #292929;
-          border-color: rgba(255, 255, 255, .2);
-          color: #eee;
-        }
-        button:last-child { color: #ccc; }
-      }
     `
     const panel = document.createElement('aside')
     panel.setAttribute('role', 'dialog')
@@ -820,6 +787,91 @@
     event.returnValue = ''
   })
 
+  // Textarea.my has a dark palette behind prefers-color-scheme. Force it on.
+  // The rules need !important because this style lands before the page's own.
+
+  function applyDarkTheme() {
+    const style = document.createElement('style')
+    style.textContent = `
+      html {
+        color-scheme: dark !important;
+        background-color: #000 !important;
+        --elevated: #121212 !important;
+        --link: #58a6ff !important;
+        --text: #fff !important;
+      }
+      #menu .item:hover { background-color: #353535 !important; }
+      .md-code,
+      .md-codeblock {
+        background: #161616;
+        border: 1px solid #3a3a3a;
+        border-radius: 5px;
+        box-decoration-break: clone;
+        -webkit-box-decoration-break: clone;
+        color: #e6e6e6;
+        font-size: .9em;
+      }
+      .md-code { padding: 1px 4px; }
+      .md-code[data-ts-fence] { background: none; border: 0; padding: 0; }
+      .md-codeblock {
+        display: inline-block;
+        padding: 6px 10px;
+        width: 100%;
+      }
+      ::highlight(ts-fence) { color: #6a6a6a; }
+      ::highlight(ts-comment) { color: #7f848e; }
+      ::highlight(ts-string) { color: #a5d6a7; }
+      ::highlight(ts-number) { color: #f4b678; }
+      ::highlight(ts-keyword) { color: #c792ea; }
+      ::highlight(ts-call) { color: #82aaff; }
+    `
+    document.documentElement.append(style)
+  }
+
+  applyDarkTheme()
+
+  // Colors code spans with CSS highlights, which leave the DOM and caret alone.
+  // Earlier rules win when token patterns overlap.
+
+  const CODE_TOKENS = [
+    ['ts-fence', /^(```|~~~).*$|^`+|`+$/gm],
+    ['ts-comment', /\/\/.*|#(?![{\[]).*|\/\*[\s\S]*?\*\//g],
+    ['ts-string', /"(?:\\.|[^"\\\n])*"|'(?:\\.|[^'\\\n])*'/g],
+    ['ts-keyword', /\b(?:func|function|def|fn|let|const|var|if|else|elif|for|while|return|import|from|package|class|struct|type|interface|new|try|catch|finally|throw|async|await|go|defer|switch|case|break|continue|public|private|static|void|int|string|bool|true|false|null|nil|None|True|False|self|this|export|default|in|of|range|map|chan|select|pub|use|mut|impl|match|enum)\b/g],
+    ['ts-number', /\b\d+(?:\.\d+)?\b/g],
+    ['ts-call', /\b[A-Za-z_]\w*(?=\s*\()/g],
+  ]
+
+  function highlightCode() {
+    if (!globalThis.CSS?.highlights || !documentArticle) return
+    const ranges = Object.fromEntries(CODE_TOKENS.map(([name]) => [name, []]))
+    for (const span of documentArticle.querySelectorAll('.md-code, .md-codeblock')) {
+
+      // A one-line ```code``` parses as `` + `code` + ``, so drop the box on the empty pairs.
+
+      span.toggleAttribute('data-ts-fence', span.classList.contains('md-code') && span.textContent === '``')
+      const node = span.firstChild
+      if (span.childNodes.length !== 1 || node.nodeType !== Node.TEXT_NODE) continue
+      const text = node.data
+      const taken = new Uint8Array(text.length)
+      for (const [name, pattern] of CODE_TOKENS) {
+        for (const match of text.matchAll(pattern)) {
+          const start = match.index
+          const end = start + match[0].length
+          if (start === end || taken.subarray(start, end).some(Boolean)) continue
+          taken.fill(1, start, end)
+          const range = new Range()
+          range.setStart(node, start)
+          range.setEnd(node, end)
+          ranges[name].push(range)
+        }
+      }
+    }
+    for (const [name, list] of Object.entries(ranges)) {
+      CSS.highlights.set(name, new Highlight(...list))
+    }
+  }
+
   addEventListener('DOMContentLoaded', () => {
     showActionsMenu()
     loadSyncedDocumentTitle()
@@ -830,7 +882,9 @@
     })
     documentArticle = document.querySelector('article')
     if (documentArticle) {
+      highlightCode()
       new MutationObserver(() => {
+        highlightCode()
         scheduleSave()
         scheduleAutoSave()
       }).observe(documentArticle, {
