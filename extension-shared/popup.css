@@ -190,3 +190,17 @@ input:focus-visible {
 .hint {
   margin: 12px 0 0;
 }
+
+label.checkbox {
+  align-items: center;
+  display: flex;
+  gap: 8px;
+  margin: 0 0 8px;
+}
+
+label.checkbox input {
+  padding: 0;
+  margin: 0;
+  min-height: 0;
+  width: auto;
+}

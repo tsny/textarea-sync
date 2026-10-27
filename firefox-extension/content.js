@@ -22,6 +22,16 @@
   const REMOTE_POLL_INTERVAL = 30000
   const INDENT = '  '
 
+  // Each setting hides one textarea.my menu item and defaults to on.
+
+  const HIDDEN_MENU_ITEMS = {
+    hideShareLink: '#share-link',
+    hideSaveAsText: '#save-as-text',
+    hideGitHubLink: '#menu a[href^="https://github.com/antonmedv/textarea"]',
+  }
+  let menuItemsStyle
+  let documentNameBadge
+
   // Reloading or updating the extension orphans this script, and every later
   // sendMessage throws synchronously. Stop the timers and ask for a reload.
   function detachFromExtension() {
@@ -52,7 +62,30 @@
     }
   }
 
+  function applyHiddenMenuItems(settings) {
+    if (!menuItemsStyle) {
+      menuItemsStyle = document.createElement('style')
+      document.documentElement.append(menuItemsStyle)
+    }
+    const selectors = Object.entries(HIDDEN_MENU_ITEMS)
+      .filter(([key]) => settings[key] !== false)
+      .map(([, selector]) => selector)
+    menuItemsStyle.textContent = selectors.length
+      ? `${selectors.join(', ')} { display: none !important; }`
+      : ''
+  }
+
+  function loadHiddenMenuItems() {
+    extensionApi.storage.local.get(Object.keys(HIDDEN_MENU_ITEMS))
+      .then(applyHiddenMenuItems)
+      .catch(() => applyHiddenMenuItems({}))
+  }
+
   function applySyncedDocumentTitle() {
+    if (documentNameBadge) {
+      documentNameBadge.textContent = syncedDocumentName
+      documentNameBadge.hidden = !syncedDocumentName
+    }
     const title = documentIsDirty ? `* ${syncedDocumentName}` : syncedDocumentName
     if (title && document.title !== title) {
       document.title = title
@@ -639,6 +672,46 @@
     })
   }
 
+  // Shows the synced document's name in a tab hanging from the top-right corner.
+  // The page is always dark, so the badge uses the menu's dark palette.
+
+  function showDocumentNameBadge() {
+    const host = document.createElement('div')
+    const shadow = host.attachShadow({mode: 'closed'})
+    const style = document.createElement('style')
+    style.textContent = `
+      :host {
+        all: initial;
+        position: fixed;
+        right: max(16px, env(safe-area-inset-right));
+        top: 0;
+        z-index: 2147483647;
+      }
+      .badge {
+        background: linear-gradient(180deg, #3a3834, #25231f);
+        border: 1px solid #0d0c0a;
+        border-radius: 0 0 8px 8px;
+        border-top: 0;
+        box-shadow: 0 2px 6px rgba(0, 0, 0, .3);
+        color: #ece6da;
+        display: block;
+        font: 600 11px/1.2 system-ui, sans-serif;
+        max-width: 40vw;
+        overflow: hidden;
+        padding: 5px 10px 6px;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .badge[hidden] { display: none; }
+    `
+    documentNameBadge = document.createElement('div')
+    documentNameBadge.className = 'badge'
+    documentNameBadge.title = 'Synced document'
+    applySyncedDocumentTitle()
+    shadow.append(style, documentNameBadge)
+    document.documentElement.append(host)
+  }
+
   function hideGitHubPrompt() {
     githubPrompt?.remove()
     githubPrompt = null
@@ -948,6 +1021,8 @@
 
   addEventListener('DOMContentLoaded', () => {
     showActionsMenu()
+    showDocumentNameBadge()
+    loadHiddenMenuItems()
     loadSyncedDocumentTitle()
     new MutationObserver(applySyncedDocumentTitle).observe(document.head, {
       childList: true,
@@ -981,6 +1056,10 @@
   })
 
   extensionApi.storage.onChanged.addListener((changes, areaName) => {
+    if (areaName === 'local' &&
+        Object.keys(HIDDEN_MENU_ITEMS).some(key => key in changes)) {
+      loadHiddenMenuItems()
+    }
     if (areaName === 'local' && changes.githubCredentials?.newValue) {
       hideGitHubPrompt()
     }

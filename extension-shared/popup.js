@@ -212,6 +212,16 @@ githubTokenHelp.addEventListener('click', () => {
   window.close()
 })
 
+const settingInputs = document.querySelectorAll('input[data-setting]')
+extensionApi.storage.local.get([...settingInputs].map(input => input.dataset.setting)).then(settings => {
+  for (const input of settingInputs) input.checked = settings[input.dataset.setting] !== false
+})
+for (const input of settingInputs) {
+  input.addEventListener('change', () => {
+    extensionApi.storage.local.set({[input.dataset.setting]: input.checked})
+  })
+}
+
 loadAndRefreshGistState().catch(error => {
   gistStatus.textContent = error.message
   githubForm.hidden = false
