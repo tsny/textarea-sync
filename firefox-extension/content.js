@@ -926,6 +926,7 @@
       ::highlight(ts-keyword) { color: #c792ea; }
       ::highlight(ts-call) { color: #82aaff; }
       ::highlight(ts-rule) { color: transparent; }
+      ::highlight(ts-heading-mark) { color: transparent; }
       .ts-rules {
         left: 0;
         pointer-events: none;
@@ -1000,6 +1001,43 @@
     }))
   }
 
+  // Heading marks (# through ######) turn transparent, and the heading shifts
+  // left by their width so the title starts at the margin. The heading under
+  // the caret keeps its marks visible so they can be edited.
+
+  const HEADING_MARK = /^#{1,6}[ \t]/
+  const HEADING_LEVELS = [1, 2, 3, 4, 5, 6]
+  let headingStyle
+
+  function hideHeadingMarks() {
+    if (!globalThis.CSS?.highlights || !documentArticle) return
+    if (!headingStyle) {
+      headingStyle = document.createElement('style')
+      document.documentElement.append(headingStyle)
+    }
+    const caret = getSelection()?.anchorNode
+    const ranges = []
+    const widths = {}
+    for (const level of HEADING_LEVELS) {
+      for (const heading of documentArticle.querySelectorAll(`.md-h${level}`)) {
+        const node = heading.firstChild
+        const match = node?.nodeType === Node.TEXT_NODE && HEADING_MARK.exec(node.data)
+        const editing = !match || heading.contains(caret)
+        heading.toggleAttribute('data-ts-mark', !editing)
+        if (editing) continue
+        const range = new Range()
+        range.setStart(node, 0)
+        range.setEnd(node, match[0].length)
+        ranges.push(range)
+        widths[level] ??= range.getBoundingClientRect().width
+      }
+    }
+    CSS.highlights.set('ts-heading-mark', new Highlight(...ranges))
+    headingStyle.textContent = Object.entries(widths)
+      .map(([level, width]) => `.md-h${level}[data-ts-mark] { margin-left: -${width}px; }`)
+      .join('\n')
+  }
+
   function highlightCode() {
     if (!globalThis.CSS?.highlights || !documentArticle) return
     const ranges = Object.fromEntries(CODE_TOKENS.map(([name]) => [name, []]))
@@ -1043,10 +1081,13 @@
     documentArticle = document.querySelector('article')
     if (documentArticle) {
       highlightCode()
+      hideHeadingMarks()
       scheduleRules()
       addEventListener('resize', scheduleRules)
+      document.addEventListener('selectionchange', hideHeadingMarks)
       new MutationObserver(() => {
         highlightCode()
+        hideHeadingMarks()
         scheduleRules()
         scheduleSave()
         scheduleAutoSave()
