@@ -521,9 +521,10 @@
       menu.classList.remove('visible')
     }
 
-    async function loadRecentDocuments() {
+    async function loadRecentDocuments({refresh = false} = {}) {
       const response = await sendMessage({
         type: 'get-recent-gist-documents',
+        refresh,
       })
       if (!response?.ok) {
         recentDocumentsSection.hidden = true
@@ -576,12 +577,19 @@
       recentDocumentsSection.hidden = documents.length === 0
     }
 
+    function showRecentDocuments(options) {
+      loadRecentDocuments(options).catch(() => {
+        // The Gist may be unreachable; keep the list already shown.
+      })
+    }
+
+    // Show the cached list at once, then pull newer edits from the Gist while the menu is open.
+
     menuButton.addEventListener('click', () => {
       refreshActionsSaveButton()
       if (menu.classList.contains('visible')) {
-        loadRecentDocuments().catch(() => {
-          recentDocumentsSection.hidden = true
-        })
+        showRecentDocuments()
+        showRecentDocuments({refresh: true})
       }
     })
     function saveFromMenu() {
@@ -607,6 +615,15 @@
     setInterval(() => {
       if (menu.classList.contains('visible')) refreshUpdateButton()
     }, 1000)
+    const recentDocumentsTimer = setInterval(() => {
+      if (extensionDetached) return clearInterval(recentDocumentsTimer)
+      if (menu.classList.contains('visible')) showRecentDocuments({refresh: true})
+    }, REMOTE_POLL_INTERVAL)
+    extensionApi.storage.onChanged.addListener((changes, areaName) => {
+      if (areaName === 'local' && changes.gistDocuments && menu.classList.contains('visible')) {
+        showRecentDocuments()
+      }
+    })
     nameInput.addEventListener('keydown', event => {
       if (event.key === 'Enter') {
         event.preventDefault()

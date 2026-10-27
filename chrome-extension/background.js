@@ -244,7 +244,15 @@ async function refreshGistDocument(requestedDocumentName) {
 
 const RECENT_DOCUMENT_LIMIT = 8
 
-async function getRecentGistDocuments() {
+async function getRecentGistDocuments({refresh = false} = {}) {
+  const credentials = refresh && await getGitHubCredentials()
+  if (credentials) {
+    const remote = await loadGist(credentials)
+    await extensionApi.storage.local.set({
+      [GIST_DOCUMENTS_KEY]: remote.documents,
+      [GIST_URL_KEY]: remote.gistUrl,
+    })
+  }
   const state = await extensionApi.storage.local.get(GIST_DOCUMENTS_KEY)
   const documents = Array.isArray(state[GIST_DOCUMENTS_KEY]) ? state[GIST_DOCUMENTS_KEY] : []
   return documents.map(candidate => {
@@ -332,7 +340,7 @@ function handleMessage(message, sender) {
   if (message?.type === 'get-recent-gist-documents') {
     const senderUrl = requireTextareaSender(sender, 'Recent documents are available only on textarea.my.')
     if (typeof senderUrl !== 'string') return {ok: false, ...senderUrl}
-    return getRecentGistDocuments()
+    return getRecentGistDocuments({refresh: message.refresh === true})
       .then(documents => ({ok: true, documents}))
       .catch(error => ({ok: false, error: error.message}))
   }
