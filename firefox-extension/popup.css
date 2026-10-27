@@ -204,3 +204,16 @@ label.checkbox input {
   min-height: 0;
   width: auto;
 }
+
+label.select select {
+  background: Canvas;
+  border: 1px solid #888;
+  border-radius: 5px;
+  color: CanvasText;
+  display: block;
+  font: 14px system-ui, sans-serif;
+  margin-top: 4px;
+  min-height: 36px;
+  padding: 6px 8px;
+  width: 100%;
+}

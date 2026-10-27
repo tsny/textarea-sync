@@ -29,6 +29,15 @@
     hideSaveAsText: '#save-as-text',
     hideGitHubLink: '#menu a[href^="https://github.com/antonmedv/textarea"]',
   }
+
+  // Widths for the actions menu, picked on the sync settings page.
+
+  const MENU_SIZE_KEY = 'actionsMenuSize'
+  const MENU_WIDTHS = {
+    compact: '240px',
+    wide: '420px',
+    'extra-wide': '560px',
+  }
   let menuItemsStyle
   let documentNameBadge
 
@@ -62,7 +71,7 @@
     }
   }
 
-  function applyHiddenMenuItems(settings) {
+  function applyMenuSettings(settings) {
     if (!menuItemsStyle) {
       menuItemsStyle = document.createElement('style')
       document.documentElement.append(menuItemsStyle)
@@ -70,15 +79,17 @@
     const selectors = Object.entries(HIDDEN_MENU_ITEMS)
       .filter(([key]) => settings[key] !== false)
       .map(([, selector]) => selector)
-    menuItemsStyle.textContent = selectors.length
-      ? `${selectors.join(', ')} { display: none !important; }`
-      : ''
+    const rules = []
+    if (selectors.length) rules.push(`${selectors.join(', ')} { display: none !important; }`)
+    const width = MENU_WIDTHS[settings[MENU_SIZE_KEY]]
+    if (width) rules.push(`#menu { width: min(calc(100vw - 32px), ${width}) !important; }`)
+    menuItemsStyle.textContent = rules.join('\n')
   }
 
-  function loadHiddenMenuItems() {
-    extensionApi.storage.local.get(Object.keys(HIDDEN_MENU_ITEMS))
-      .then(applyHiddenMenuItems)
-      .catch(() => applyHiddenMenuItems({}))
+  function loadMenuSettings() {
+    extensionApi.storage.local.get([...Object.keys(HIDDEN_MENU_ITEMS), MENU_SIZE_KEY])
+      .then(applyMenuSettings)
+      .catch(() => applyMenuSettings({}))
   }
 
   function applySyncedDocumentTitle() {
@@ -1022,7 +1033,7 @@
   addEventListener('DOMContentLoaded', () => {
     showActionsMenu()
     showDocumentNameBadge()
-    loadHiddenMenuItems()
+    loadMenuSettings()
     loadSyncedDocumentTitle()
     new MutationObserver(applySyncedDocumentTitle).observe(document.head, {
       childList: true,
@@ -1057,8 +1068,8 @@
 
   extensionApi.storage.onChanged.addListener((changes, areaName) => {
     if (areaName === 'local' &&
-        Object.keys(HIDDEN_MENU_ITEMS).some(key => key in changes)) {
-      loadHiddenMenuItems()
+        [...Object.keys(HIDDEN_MENU_ITEMS), MENU_SIZE_KEY].some(key => key in changes)) {
+      loadMenuSettings()
     }
     if (areaName === 'local' && changes.githubCredentials?.newValue) {
       hideGitHubPrompt()

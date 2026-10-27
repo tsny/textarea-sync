@@ -222,6 +222,14 @@ for (const input of settingInputs) {
   })
 }
 
+const menuSize = document.querySelector('#menu-size')
+extensionApi.storage.local.get('actionsMenuSize').then(settings => {
+  menuSize.value = settings.actionsMenuSize || 'default'
+})
+menuSize.addEventListener('change', () => {
+  extensionApi.storage.local.set({actionsMenuSize: menuSize.value})
+})
+
 loadAndRefreshGistState().catch(error => {
   gistStatus.textContent = error.message
   githubForm.hidden = false
