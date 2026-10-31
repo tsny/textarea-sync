@@ -304,6 +304,18 @@
     }
   }
 
+  // Mirrors textarea.my's own decompress(): base64url, then deflate-raw, with
+  // the article's inline style appended after a NUL.
+
+  async function decodeDocumentText(hash) {
+    const base64 = hash.replace(/^#/, '').replace(/-/g, '+').replace(/_/g, '/')
+    const binary = atob(base64.padEnd(Math.ceil(base64.length / 4) * 4, '='))
+    const bytes = Uint8Array.from(binary, character => character.charCodeAt(0))
+    const stream = new Blob([bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'))
+    const text = await new Response(stream).text()
+    return text.split('\x00')[0]
+  }
+
   function createExternalLinkIcon() {
     const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
     svg.setAttribute('viewBox', '0 0 16 16')
@@ -477,6 +489,46 @@
         padding: 6px;
         width: auto;
       }
+      #ts-preview {
+        background: linear-gradient(180deg, #2e2c28, #1f1d1a);
+        border: 1px solid #0d0c0a;
+        border-radius: 10px;
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, .1),
+          0 14px 34px rgba(0, 0, 0, .32),
+          0 3px 8px rgba(0, 0, 0, .18);
+        box-sizing: border-box;
+        color: #ece6da;
+        display: flex;
+        flex-direction: column;
+        max-height: min(60vh, 480px);
+        overflow: hidden;
+        position: fixed;
+        width: min(420px, 34vw);
+        z-index: 2147483646;
+      }
+      #ts-preview > strong {
+        border-bottom: 1px solid rgba(0, 0, 0, .45);
+        box-shadow: 0 1px 0 rgba(255, 255, 255, .08);
+        font: 600 11px / 1.2 system-ui;
+        letter-spacing: .04em;
+        opacity: .6;
+        overflow: hidden;
+        padding: 8px 12px 7px;
+        text-overflow: ellipsis;
+        text-transform: uppercase;
+        white-space: nowrap;
+      }
+      #ts-preview > pre {
+        font: 12px / 1.45 monospace;
+        margin: 0;
+        overflow-y: auto;
+        overscroll-behavior: contain;
+        padding: 10px 12px 14px;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+      #ts-preview > pre:empty::before { content: 'Empty document'; font-style: italic; opacity: .5; }
     `
     document.head.append(style)
 
@@ -565,6 +617,95 @@
       menu.classList.remove('visible')
     }
 
+    // On desktop, resting the pointer on a recent document shows its text
+    // beside the menu. textarea.my keeps the text in the URL hash, so the
+    // preview decodes it locally without loading the page. Leaving the row
+    // waits briefly so the pointer can cross the gap onto the preview, which
+    // then stays open until the pointer leaves it.
+
+    const canHover = matchMedia('(hover: hover) and (pointer: fine)')
+    const PREVIEW_DELAY = 250
+    const PREVIEW_HIDE_DELAY = 200
+    const PREVIEW_LENGTH = 20000
+    const previewTexts = new Map()
+    let preview
+    let previewTimer
+    let previewHideTimer
+    let previewAnchor
+
+    function hidePreview() {
+      clearTimeout(previewTimer)
+      clearTimeout(previewHideTimer)
+      previewAnchor = null
+      preview?.remove()
+    }
+
+    function placePreview(anchor) {
+      const margin = 12
+      const menuRect = menu.getBoundingClientRect()
+      const rowRect = anchor.getBoundingClientRect()
+      const {width, height} = preview.getBoundingClientRect()
+      const left = menuRect.left - width - 8 >= margin
+        ? menuRect.left - width - 8
+        : Math.min(menuRect.right + 8, innerWidth - width - margin)
+      const top = Math.min(Math.max(margin, rowRect.top), innerHeight - height - margin)
+      preview.style.left = `${Math.max(margin, left)}px`
+      preview.style.top = `${Math.max(margin, top)}px`
+    }
+
+    async function showPreview(anchor, recentDocument) {
+      let text = previewTexts.get(recentDocument.url)
+      if (text === undefined) {
+        try {
+          text = await decodeDocumentText(new URL(recentDocument.url).hash)
+        } catch {
+          text = null
+        }
+        previewTexts.set(recentDocument.url, text)
+      }
+      if (previewAnchor !== anchor || text === null) return
+      if (!preview) {
+        preview = document.createElement('div')
+        preview.id = 'ts-preview'
+        preview.setAttribute('aria-hidden', 'true')
+        preview.append(document.createElement('strong'), document.createElement('pre'))
+        preview.addEventListener('mouseenter', () => clearTimeout(previewHideTimer))
+        preview.addEventListener('mouseleave', schedulePreviewHide)
+        // textarea.my closes the menu on any click outside it, which would
+        // also close the preview while selecting its text.
+        preview.addEventListener('click', event => event.stopPropagation())
+      }
+      preview.firstChild.textContent = recentDocument.name
+      preview.lastChild.textContent = text.trim().slice(0, PREVIEW_LENGTH)
+      preview.lastChild.scrollTop = 0
+      document.body.append(preview)
+      placePreview(anchor)
+    }
+
+    function schedulePreview(anchor, recentDocument) {
+      if (!canHover.matches) return
+      clearTimeout(previewTimer)
+      clearTimeout(previewHideTimer)
+      previewAnchor = anchor
+      previewTimer = setTimeout(() => {
+        showPreview(anchor, recentDocument).catch(hidePreview)
+      }, preview?.isConnected ? 0 : PREVIEW_DELAY)
+    }
+
+    function schedulePreviewHide() {
+      clearTimeout(previewHideTimer)
+      previewHideTimer = setTimeout(hidePreview, PREVIEW_HIDE_DELAY)
+    }
+
+    function cancelPreview(anchor) {
+      if (previewAnchor === anchor) schedulePreviewHide()
+    }
+
+    new MutationObserver(() => {
+      if (!menu.classList.contains('visible')) hidePreview()
+    }).observe(menu, {attributes: true, attributeFilter: ['class']})
+    recentDocuments.addEventListener('scroll', hidePreview, {passive: true})
+
     async function loadRecentDocuments({refresh = false} = {}) {
       const response = await sendMessage({
         type: 'get-recent-gist-documents',
@@ -577,6 +718,7 @@
       const documents = response.documents.filter(candidate => (
         candidate.name.toLocaleLowerCase() !== syncedDocumentName.toLocaleLowerCase()
       ))
+      hidePreview()
       recentDocuments.replaceChildren()
       for (const recentDocument of documents) {
         const row = document.createElement('div')
@@ -615,6 +757,9 @@
           }
           goToDocument(recentDocument.url)
         })
+        row.addEventListener('mouseenter', () => schedulePreview(row, recentDocument))
+        row.addEventListener('mouseleave', () => cancelPreview(row))
+        row.addEventListener('click', hidePreview)
         row.append(button, openButton)
         recentDocuments.append(row)
       }
